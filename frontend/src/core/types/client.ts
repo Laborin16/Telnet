@@ -21,7 +21,7 @@ export interface Tecnico {
 }
 
 export type EstadoServicio = "Activo" | "Suspendido" | "Cancelado";
-export type AlertaCorte = "normal" | "proximo" | "critico" | "vencido";
+export type AlertaCorte = "normal" | "critico" | "pendiente" | "suspendido";
 
 export interface ClientItem {
   id_servicio: number;
@@ -46,7 +46,33 @@ export interface ClientItem {
 
 export interface ClientListResponse {
   count: number;
-  next: string | null;
-  previous: string | null;
+  total_pages: number;
+  page: number;
+  page_size: number;
   results: ClientItem[];
+}
+
+export interface ClientDetail {
+  id_servicio: number;
+  usuario_rb: string;
+  ip: string;
+  estado: EstadoServicio;
+  facturas_pagadas: boolean;
+  firewall: boolean;
+  fecha_corte: string | null;
+  dias_para_corte: number | null;
+  alerta_corte: AlertaCorte | null;
+  auto_activar_servicio: boolean;
+  forma_contratacion: string;
+  comentarios: string;
+  fecha_registro: string | null;
+  fecha_instalacion: string | null;
+  fecha_cancelacion: string | null;
+  mac_cpe: string;
+  ip_router_wifi: string | null;
+  ssid_router_wifi: string;
+  plan_internet: PlanInternet | null;
+  zona: Zona | null;
+  router: Router | null;
+  tecnico: Tecnico | null;
 }

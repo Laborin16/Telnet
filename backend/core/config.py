@@ -21,4 +21,7 @@ class Settings(BaseSettings):
 	app_env: str = "development"
 	app_secret_key: str
 
+	# WhatsApp
+	whatsapp_token: str
+	whatsapp_phone_number_id: str
 settings = Settings()
