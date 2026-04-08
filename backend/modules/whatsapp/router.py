@@ -6,7 +6,7 @@ router = APIRouter()
 
 
 class TestMessageRequest(BaseModel):
-    phone: str  # international format without +, e.g. "526621234567"
+    phone: str
 
 
 @router.post("/test")

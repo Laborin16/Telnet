@@ -16,8 +16,7 @@ export function WhatsAppTestPanel() {
     setStatus("sending");
     setMessage("");
     try {
-      await apiClient.post("/api/v1/whatsapp/test", { phone: cleaned });
-      setStatus("ok");
+      await apiClient.post("/api/v1/whatsapp/test", { phone: cleaned, template_name: "hello_world" });      setStatus("ok");
       setMessage("Mensaje enviado correctamente.");
     } catch (e: unknown) {
       setStatus("error");

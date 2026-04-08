@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useDashboardStats } from "../../finanzas/hooks/useDashboardStats";
 import { KPICard } from "../../finanzas/components/KPICard";
-import { StatusDonutChart } from "../../finanzas/components/StatusDonutChart";
-import { AlertaDonutChart } from "../../finanzas/components/AlertaDonutChart";
 import { PlanBarChart } from "../../finanzas/components/PlanBarChart";
 import { WhatsAppTestPanel } from "../../finanzas/components/WhatsAppTestPanel";
 
@@ -54,17 +52,6 @@ export function DashboardPage() {
         <KPICard title="Activos" value={stats.activos} subtitle={`${pct(stats.activos, stats.total)} del total · MRR ${fmt.format(stats.mrrActivo)}`} accentColor="#16a34a" />
         <KPICard title="Suspendidos" value={stats.suspendidos} subtitle={`${pct(stats.suspendidos, stats.total)} del total · MRR en riesgo ${fmt.format(stats.mrrSuspendido)}`} accentColor="#d97706" />
         <KPICard title="Cancelados" value={stats.cancelados} subtitle={`${pct(stats.cancelados, stats.total)} del total`} accentColor="#dc2626" />
-        <KPICard
-          title="Riesgo de Corte"
-          value={stats.riesgoCorte.critico + stats.riesgoCorte.pendiente}
-          subtitle="Clientes activos con pago pendiente o crítico"
-          subMetrics={[
-            { label: "Crítico", value: stats.riesgoCorte.critico },
-            { label: "Pendiente", value: stats.riesgoCorte.pendiente },
-          ]}
-          accentColor="#7f1d1d"
-          valueColor="#dc2626"
-        />
       </div>
 
       {/* KPIs de periodo */}
@@ -83,12 +70,6 @@ export function DashboardPage() {
             valueColor={neto >= 0 ? "#16a34a" : "#dc2626"}
           />
         </div>
-      </div>
-
-      {/* Gráficas */}
-      <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-        <StatusDonutChart activos={stats.activos} suspendidos={stats.suspendidos} cancelados={stats.cancelados} total={stats.total} />
-        <AlertaDonutChart breakdown={stats.alertaBreakdown} totalActivos={stats.activos} />
       </div>
 
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
