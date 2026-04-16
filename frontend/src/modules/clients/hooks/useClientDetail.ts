@@ -7,5 +7,6 @@ export function useClientDetail(id: number | null) {
     queryFn: () => fetchClientDetail(id!),
     enabled: id !== null,
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 }

@@ -6,7 +6,8 @@ export function useAllClients() {
   return useQuery({
     queryKey: ["clients-all"],
     queryFn: () => fetchClients({ page: 1, page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
     select: (data): ClientItem[] => data.results,
   });
 }

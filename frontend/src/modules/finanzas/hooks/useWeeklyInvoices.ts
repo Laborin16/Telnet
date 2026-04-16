@@ -9,6 +9,7 @@ export interface InvoiceItem {
   total: number;
   tipo_cobro: "mensualidad" | "instalacion";
   cliente: {
+    id_servicio?: number;
     nombre: string;
     telefono: string;
     direccion: string;
@@ -34,6 +35,7 @@ export function useWeeklyInvoices(weekStart: string) {
       });
       return res.data;
     },
-    staleTime: 2 * 60 * 1000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 }

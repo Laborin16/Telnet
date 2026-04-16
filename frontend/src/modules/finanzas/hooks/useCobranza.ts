@@ -111,7 +111,7 @@ export interface ClienteAlerta {
   nombre: string;
   telefono: string;
   estado: string;
-  fecha_corte: string;
+  fecha_vencimiento: string;
   dias_vencido: number;
   id_factura?: number;
   total?: number;
@@ -124,6 +124,7 @@ export interface GrupoAlerta {
 
 export interface AlertasCobranza {
   total: number;
+  hoy: GrupoAlerta;
   dia_1: GrupoAlerta;
   dia_2: GrupoAlerta;
   dia_3: GrupoAlerta;
@@ -137,13 +138,69 @@ export function useAlertasCobranza() {
       const res = await apiClient.get("/api/v1/finanzas/alertas-cobranza");
       return res.data;
     },
-    staleTime: 3 * 60 * 1000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 }
 
 export interface PagoWispHubInput {
   monto: number;
   forma_pago: number;
+  tipo_pago?: string;
+  cuenta?: string;
+  id_servicio?: number;
+  nombre_cliente?: string;
+  fecha_pago_real?: string;
+}
+
+// ── Historial de pagos registrados ───────────────────────────────────────────
+
+export interface HistorialPagoItem {
+  id: number;
+  id_cliente: string;
+  nombre_cliente: string | null;
+  id_factura: number | null;
+  monto: number;
+  metodo_pago: string;
+  fecha_pago_real: string | null;
+  fecha_registro: string;
+  notas: string | null;
+  comprobante_url: string | null;
+}
+
+export function useSubirComprobante() {
+  const queryClient = useQueryClient();
+  return useMutation<{ comprobante_url: string }, Error, { pago_id: number; file: File }>({
+    mutationFn: async ({ pago_id, file }) => {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await apiClient.post(`/api/v1/finanzas/pagos/${pago_id}/comprobante`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["historial-pagos"] });
+    },
+  });
+}
+
+export interface HistorialPagos {
+  total: number;
+  items: HistorialPagoItem[];
+}
+
+export function useHistorialPagos(search: string) {
+  return useQuery<HistorialPagos>({
+    queryKey: ["historial-pagos", search],
+    queryFn: async () => {
+      const res = await apiClient.get("/api/v1/finanzas/historial", {
+        params: search ? { search } : {},
+      });
+      return res.data;
+    },
+    staleTime: 60 * 1000,
+  });
 }
 
 export function useRegistrarPagoWispHub() {
@@ -173,6 +230,79 @@ export interface ItemRecoleccion {
   total: number;
   estado_equipo?: string | null;
   notas?: string | null;
+  id_tecnico?: number | null;
+  nombre_tecnico?: string | null;
+}
+
+export function useObservaciones(entityType: string, ids: number[], enabled: boolean) {
+  const key = ids.slice().sort((a, b) => a - b).join(",");
+  return useQuery<Record<number, string>>({
+    queryKey: ["observaciones", entityType, key],
+    queryFn: async () => {
+      if (!ids.length) return {};
+      const res = await apiClient.get(`/api/v1/finanzas/observaciones/${entityType}`, {
+        params: { ids: ids.join(",") },
+      });
+      return res.data;
+    },
+    enabled: enabled && ids.length > 0,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useSaveObservacion() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { entity_type: string; entity_id: number; notas: string },
+    Error,
+    { entity_type: string; entity_id: number; notas: string }
+  >({
+    mutationFn: async ({ entity_type, entity_id, notas }) => {
+      const res = await apiClient.put(
+        `/api/v1/finanzas/observaciones/${entity_type}/${entity_id}`,
+        { notas }
+      );
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["observaciones", data.entity_type] });
+    },
+  });
+}
+
+export interface FormaPago {
+  id: number;
+  nombre: string;
+}
+
+export function useFormasPago() {
+  return useQuery<FormaPago[]>({
+    queryKey: ["formas-pago"],
+    queryFn: async () => {
+      const res = await apiClient.get("/api/v1/finanzas/formas-pago");
+      return res.data;
+    },
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export interface Tecnico {
+  id: number;
+  nombre: string;
+}
+
+export function useTecnicos() {
+  return useQuery<Tecnico[]>({
+    queryKey: ["tecnicos"],
+    queryFn: async () => {
+      const res = await apiClient.get("/api/v1/finanzas/tecnicos");
+      return res.data;
+    },
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
 }
 
 export interface RecoleccionData {
@@ -187,7 +317,8 @@ export function useRecoleccion() {
       const res = await apiClient.get("/api/v1/finanzas/recoleccion");
       return res.data;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 }
 
@@ -196,7 +327,7 @@ export function useGuardarEstadoEquipo() {
   return useMutation<
     { id_servicio: number; estado_equipo: string },
     Error,
-    { id_servicio: number; estado_equipo: string; notas?: string }
+    { id_servicio: number; estado_equipo: string; notas?: string; id_tecnico?: number | null; nombre_tecnico?: string | null }
   >({
     mutationFn: async ({ id_servicio, ...data }) => {
       const res = await apiClient.post(

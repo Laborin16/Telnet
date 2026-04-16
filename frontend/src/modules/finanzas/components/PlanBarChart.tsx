@@ -36,7 +36,7 @@ export function PlanBarChart({ data, title, color = "#1e40af" }: Props) {
           tickLine={false}
         />
         <Tooltip
-          formatter={(value: number) => [`${value} clientes`, ""]}
+          formatter={((value: number) => [`${value} clientes`, ""]) as any}
           contentStyle={{ fontSize: "12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}
         />
         <Bar dataKey="count" radius={[0, 4, 4, 0]}>

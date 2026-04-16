@@ -41,7 +41,7 @@ export function StatusDonutChart({ activos, suspendidos, cancelados, total }: Pr
                 <Cell key={entry.name} fill={COLORS[entry.name]} />
               ))}
             </Pie>
-            <Tooltip formatter={(value: number) => [`${value} clientes`, ""]} />
+            <Tooltip formatter={((value: number) => [`${value} clientes`, ""]) as any} />
           </PieChart>
           <div style={{
             position: "absolute", top: "50%", left: "50%",

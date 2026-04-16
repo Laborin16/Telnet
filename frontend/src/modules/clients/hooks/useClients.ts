@@ -6,7 +6,8 @@ export function useClients(filters: ClientFilters = {}) {
   return useQuery({
     queryKey: ["clients", filters],
     queryFn: () => fetchClients(filters),
-    staleTime: 90_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
     placeholderData: (prev) => prev,
   });
 }

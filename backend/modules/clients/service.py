@@ -1,26 +1,48 @@
 import asyncio
-from datetime import date
+from datetime import date, datetime
 from core.wisphub.client import WispHubClient
 from modules.clients.schemas import ClientItem, ClientListResponse, ClientDetail
 
+_FECHA_PAGO_FMTS = (
+    "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%Y %H:%M",
+    "%d/%m/%Y",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d",
+)
+
+
+def _parse_fecha_pago(f: dict) -> date | None:
+    """Parsea fecha_pago de la factura; cae a fecha_vencimiento si no existe."""
+    fp_raw = (f.get("fecha_pago") or "").strip()
+    if fp_raw:
+        for fmt in _FECHA_PAGO_FMTS:
+            try:
+                return datetime.strptime(fp_raw[:19], fmt).date()
+            except ValueError:
+                continue
+    fv_str = (f.get("fecha_vencimiento") or "")[:10]
+    if fv_str:
+        try:
+            return date.fromisoformat(fv_str)
+        except ValueError:
+            pass
+    return None
+
 
 def _build_vencimiento_map(facturas_raw: dict) -> dict[int, date]:
-    """Build map of id_servicio → earliest fecha_vencimiento for pending invoices."""
+    """Build map of id_servicio → fecha_pago de la factura pendiente más próxima."""
     vmap: dict[int, date] = {}
     for f in facturas_raw.get("results", []):
         if f.get("estado") != "Pendiente de Pago":
             continue
-        fv_str = f.get("fecha_vencimiento")
-        if not fv_str:
-            continue
-        try:
-            fv = date.fromisoformat(fv_str[:10])
-        except ValueError:
+        fp = _parse_fecha_pago(f)
+        if not fp:
             continue
         for art in f.get("articulos", []):
             srv_id = art.get("servicio", {}).get("id_servicio")
-            if srv_id and (srv_id not in vmap or fv < vmap[srv_id]):
-                vmap[srv_id] = fv
+            if srv_id and (srv_id not in vmap or fp < vmap[srv_id]):
+                vmap[srv_id] = fp
     return vmap
 
 

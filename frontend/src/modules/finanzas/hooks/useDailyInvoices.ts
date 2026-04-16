@@ -10,6 +10,7 @@ export interface DailyPaymentItem {
   metodo_pago: string;
   tipo_cobro: "mensualidad" | "instalacion";
   cliente: {
+    id_servicio?: number;
     nombre: string;
     telefono: string;
     direccion: string;
@@ -18,21 +19,23 @@ export interface DailyPaymentItem {
 
 export interface DailyInvoices {
   fecha: string;
+  fecha_fin: string;
   numero_total_pagos: number;
   monto_total_cobrado: number;
   lista_clientes: DailyPaymentItem[];
 }
 
-export function useDailyInvoices(fecha: string) {
+export function useDailyInvoices(fecha: string, fechaFin?: string) {
   return useQuery<DailyInvoices>({
-    queryKey: ["cobros-dia", fecha],
+    queryKey: ["cobros-dia", fecha, fechaFin],
     queryFn: async () => {
       const res = await apiClient.get("/api/v1/finanzas/cobros-dia", {
-        params: { fecha },
+        params: { fecha, ...(fechaFin ? { fecha_fin: fechaFin } : {}) },
       });
       return res.data;
     },
-    staleTime: 2 * 60 * 1000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
     enabled: !!fecha,
   });
 }

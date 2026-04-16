@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useGuardarEstadoEquipo } from "../hooks/useCobranza";
+import { useGuardarEstadoEquipo, useTecnicos } from "../hooks/useCobranza";
 import type { ItemRecoleccion } from "../hooks/useCobranza";
 
 const ESTADOS_EQUIPO = [
@@ -18,11 +18,20 @@ interface Props {
 export function RecoleccionModal({ item, onClose }: Props) {
   const [estadoEquipo, setEstadoEquipo] = useState(item.estado_equipo ?? "nada_recuperado");
   const [notas, setNotas] = useState(item.notas ?? "");
+  const [tecnicoId, setTecnicoId] = useState<number | null>(item.id_tecnico ?? null);
   const { mutate, isPending, isSuccess } = useGuardarEstadoEquipo();
+  const { data: tecnicos } = useTecnicos();
 
   function handleGuardar() {
+    const tecnico = tecnicos?.find((t) => t.id === tecnicoId) ?? null;
     mutate(
-      { id_servicio: item.id_servicio, estado_equipo: estadoEquipo, notas: notas || undefined },
+      {
+        id_servicio: item.id_servicio,
+        estado_equipo: estadoEquipo,
+        notas: notas || undefined,
+        id_tecnico: tecnicoId,
+        nombre_tecnico: tecnico?.nombre ?? null,
+      },
       { onSuccess: () => setTimeout(onClose, 1500) }
     );
   }
@@ -54,6 +63,20 @@ export function RecoleccionModal({ item, onClose }: Props) {
                 </label>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Técnico asignado</label>
+            <select
+              value={tecnicoId ?? ""}
+              onChange={(e) => setTecnicoId(e.target.value ? Number(e.target.value) : null)}
+              style={inputStyle}
+            >
+              <option value="">Sin asignar</option>
+              {(tecnicos ?? []).map((t) => (
+                <option key={t.id} value={t.id}>{t.nombre}</option>
+              ))}
+            </select>
           </div>
 
           <div>

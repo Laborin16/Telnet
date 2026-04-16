@@ -20,10 +20,12 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     app_secret_key: str
+    allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
-	# WhatsApp
+    # WhatsApp API
     whatsapp_token: str
     whatsapp_phone_number_id: str
     whatsapp_business_account_id: str
-
+    whatsapp_contact_phone: str = ""
+    
 settings = Settings()

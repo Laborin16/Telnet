@@ -17,6 +17,8 @@ backend/data/
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.env
+frontend/.env.*
 
 # IDEs
 .vscode/

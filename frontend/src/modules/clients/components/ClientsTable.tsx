@@ -1,72 +1,129 @@
+import { useState } from "react";
 import type { AlertaCorte, ClientItem } from "../../../core/types/client";
 import { ClientStatusBadge } from "./ClientStatusBadge";
+import { ObservacionCell } from "../../finanzas/components/ObservacionCell";
 
 const alertaColor: Record<string, string> = {
   normal: "#16a34a", critico: "#dc2626", pendiente: "#d97706", suspendido: "#64748b",
 };
 
 function FechaCorteCell({ fecha, alerta }: { fecha: string | null; alerta: AlertaCorte | null }) {
-  if (!fecha) return <span style={{ color: "#94a3b8" }}>—</span>;
-  const formatted = new Date(fecha + "T12:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
-  const color = alerta ? (alertaColor[alerta] ?? "#1e293b") : "#1e293b";
-  return <span style={{ color, fontWeight: 600 }}>{formatted}</span>;
+  if (!fecha) return <span style={{ color: "#cbd5e1" }}>—</span>;
+  const formatted = new Date(fecha + "T12:00:00").toLocaleDateString("es-MX", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
+  const color = alerta ? (alertaColor[alerta] ?? "#334155") : "#334155";
+  return <span style={{ color, fontWeight: 600, fontSize: "12px" }}>{formatted}</span>;
 }
 
 interface Props {
   clients: ClientItem[];
   onSelect: (id: number) => void;
+  obsMap?: Record<number, string>;
 }
 
-export function ClientsTable({ clients, onSelect }: Props) {
+export function ClientsTable({ clients, onSelect, obsMap }: Props) {
+  const [hovered, setHovered] = useState<number | null>(null);
+
+  if (clients.length === 0) {
+    return (
+      <div style={{ padding: "48px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
+        No hay clientes que coincidan con los filtros.
+      </div>
+    );
+  }
+
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+      <table style={{ width: "100%", minWidth: "1000px", borderCollapse: "collapse", fontSize: "13px" }}>
         <thead>
-          <tr style={{ backgroundColor: "#f1f5f9", textAlign: "left" }}>
-            <th style={th}>ID</th>
+          <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
+            <th style={{ ...th, textAlign: "center" }}>#</th>
             <th style={th}>Nombre</th>
             <th style={th}>Plan</th>
             <th style={th}>Zona</th>
-            <th style={th}>Estado</th>
-            <th style={th}>Facturas</th>
-            <th style={th}>Fecha Corte</th>
-            <th style={th}>Saldo</th>
+            <th style={{ ...th, textAlign: "center" }}>Estado</th>
+            <th style={{ ...th, textAlign: "center" }}>Facturas</th>
+            <th style={{ ...th, textAlign: "center" }}>Fecha Corte</th>
+            <th style={{ ...th, textAlign: "right" }}>Costo Plan</th>
+            <th style={th}>Notas</th>
             <th style={th}></th>
           </tr>
         </thead>
         <tbody>
-          {clients.map((client) => (
-            <tr key={client.id_servicio} style={{ borderBottom: "1px solid #e2e8f0" }}>
-              <td style={td}>{client.id_servicio}</td>
-              <td style={td}>{client.nombre}</td>
-              <td style={td}>{client.plan_internet?.nombre ?? "—"}</td>
-              <td style={td}>{client.zona?.nombre ?? "—"}</td>
-              <td style={td}><ClientStatusBadge estado={client.estado} /></td>
-              <td style={td}>{client.estado_facturas}</td>
-              <td style={td}>
-                <FechaCorteCell fecha={client.fecha_corte} alerta={client.alerta_corte} />
-              </td>
-              <td style={td}>${client.saldo}</td>
-              <td style={td}>
-                <button
-                  onClick={() => onSelect(client.id_servicio)}
-                  style={verBtn}
-                >
-                  Ver
-                </button>
-              </td>
-            </tr>
-          ))}
+          {clients.map((client) => {
+            const isHov = hovered === client.id_servicio;
+            return (
+              <tr
+                key={client.id_servicio}
+                onMouseEnter={() => setHovered(client.id_servicio)}
+                onMouseLeave={() => setHovered(null)}
+                style={{ borderBottom: "1px solid #f1f5f9", background: isHov ? "#eff6ff" : "white" }}
+              >
+                <td style={{ ...td, textAlign: "center", color: "#94a3b8", fontSize: "12px" }}>
+                  {client.id_servicio}
+                </td>
+                <td style={{ ...td, fontWeight: 500, color: "#0f172a", whiteSpace: "nowrap" }}>
+                  {client.nombre}
+                </td>
+                <td style={{ ...td, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#475569" }}>
+                  {client.plan_internet?.nombre ?? <span style={{ color: "#cbd5e1" }}>—</span>}
+                </td>
+                <td style={{ ...td, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#64748b" }}>
+                  {client.zona?.nombre ?? <span style={{ color: "#cbd5e1" }}>—</span>}
+                </td>
+                <td style={{ ...td, textAlign: "center" }}>
+                  <ClientStatusBadge estado={client.estado} />
+                </td>
+                <td style={{ ...td, textAlign: "center", color: "#64748b" }}>
+                  {client.estado_facturas}
+                </td>
+                <td style={{ ...td, textAlign: "center" }}>
+                  <FechaCorteCell fecha={client.fecha_corte} alerta={client.alerta_corte} />
+                </td>
+                <td style={{ ...td, textAlign: "right", fontWeight: 600, color: "#0f172a" }}>
+                  ${client.precio_plan}
+                </td>
+                <ObservacionCell
+                  entityType="cliente"
+                  entityId={client.id_servicio}
+                  value={obsMap?.[client.id_servicio]}
+                />
+                <td style={{ ...td, textAlign: "center" }}>
+                  <button onClick={() => onSelect(client.id_servicio)} style={verBtn}>Ver</button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
-const th: React.CSSProperties = { padding: "10px 16px", fontWeight: 600, fontSize: "13px", color: "#475569" };
-const td: React.CSSProperties = { padding: "10px 16px", color: "#1e293b" };
+const th: React.CSSProperties = {
+  padding: "9px 14px",
+  fontWeight: 600,
+  fontSize: "11px",
+  color: "#64748b",
+  textAlign: "left",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  whiteSpace: "nowrap",
+};
+
+const td: React.CSSProperties = {
+  padding: "11px 14px",
+  color: "#334155",
+};
+
 const verBtn: React.CSSProperties = {
-  padding: "4px 10px", borderRadius: "6px",
-  border: "1px solid #e2e8f0", backgroundColor: "white",
-  color: "#1e40af", fontSize: "12px", cursor: "pointer", fontWeight: 600,
+  padding: "3px 9px",
+  borderRadius: "5px",
+  border: "1px solid #dbeafe",
+  background: "#eff6ff",
+  color: "#2563eb",
+  fontSize: "12px",
+  cursor: "pointer",
+  fontWeight: 600,
 };

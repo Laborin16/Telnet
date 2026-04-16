@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useDashboardStats } from "../../finanzas/hooks/useDashboardStats";
+import { useMetodosPagoStats } from "../../finanzas/hooks/useMetodosPagoStats";
 import { KPICard } from "../../finanzas/components/KPICard";
 import { PlanBarChart } from "../../finanzas/components/PlanBarChart";
 import { WhatsAppTestPanel } from "../../finanzas/components/WhatsAppTestPanel";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from "recharts";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 
@@ -16,6 +18,7 @@ export function DashboardPage() {
   const [dateTo, setDateTo] = useState<string>("");
 
   const stats = useDashboardStats(dateFrom || null, dateTo || null);
+  const metodos = useMetodosPagoStats();
 
   if (stats.isLoading) return <p style={{ color: "#64748b", padding: "16px" }}>Cargando datos...</p>;
   if (stats.isError) return <p style={{ color: "#dc2626", padding: "16px" }}>Error al cargar los datos.</p>;
@@ -77,6 +80,30 @@ export function DashboardPage() {
         <PlanBarChart data={stats.zonaBreakdown} title="Clientes por Zona" color="#0891b2" />
       </div>
 
+      {/* Gráficas de métodos de pago */}
+      <div>
+        <p style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 10px 0" }}>
+          Métodos de pago
+        </p>
+        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+          <MetodoPagoCard
+            title="Efectivo"
+            color="#16a34a"
+            data={[{ nombre: "Efectivo", monto: metodos.efectivo.monto, count: metodos.efectivo.count }]}
+          />
+          <MetodoPagoCard
+            title="Transferencia"
+            color="#2563eb"
+            data={metodos.transferencia}
+          />
+          <MetodoPagoCard
+            title="Depósito"
+            color="#7c3aed"
+            data={metodos.deposito}
+          />
+        </div>
+      </div>
+
       <WhatsAppTestPanel />
     </div>
   );
@@ -86,3 +113,59 @@ const inputStyle: React.CSSProperties = {
   padding: "6px 10px", borderRadius: "6px", border: "1px solid #e2e8f0",
   fontSize: "13px", color: "#1e293b", outline: "none",
 };
+
+const COLORS_ALT = ["#93c5fd", "#a5b4fc", "#86efac", "#fcd34d"];
+
+function MetodoPagoCard({ title, data, color }: { title: string; data: { nombre: string; monto: number; count: number }[]; color: string }) {
+  const totalMonto = data.reduce((s, d) => s + d.monto, 0);
+  const totalCount = data.reduce((s, d) => s + d.count, 0);
+  const hasData = totalCount > 0;
+
+  return (
+    <div style={{ backgroundColor: "white", borderRadius: "10px", border: "1px solid #e2e8f0", padding: "20px", flex: 1, minWidth: "220px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+        <p style={{ fontSize: "13px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>{title}</p>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: "18px", fontWeight: 700, color }}>{fmt.format(totalMonto)}</div>
+          <div style={{ fontSize: "11px", color: "#94a3b8" }}>{totalCount} pago{totalCount !== 1 ? "s" : ""}</div>
+        </div>
+      </div>
+
+      {!hasData && (
+        <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>Sin pagos registrados</p>
+      )}
+
+      {hasData && (
+        <BarChart
+          layout="vertical"
+          width={280}
+          height={data.length * 36 + 20}
+          data={data}
+          margin={{ top: 0, right: 50, left: 0, bottom: 0 }}
+        >
+          <XAxis type="number" hide />
+          <YAxis
+            type="category"
+            dataKey="nombre"
+            width={130}
+            tick={{ fontSize: 11, fill: "#475569" }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            formatter={((value: number, _: string, props: { payload?: { count?: number } }) => [
+              `${fmt.format(value)} · ${props.payload?.count ?? 0} pagos`,
+              "",
+            ]) as any}
+            contentStyle={{ fontSize: "12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}
+          />
+          <Bar dataKey="monto" radius={[0, 4, 4, 0]}>
+            {data.map((_, i) => (
+              <Cell key={i} fill={i === 0 ? color : COLORS_ALT[i % COLORS_ALT.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      )}
+    </div>
+  );
+}
