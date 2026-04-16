@@ -535,10 +535,10 @@ export function FinanzasPage() {
                 <td style={td}>
                   {(() => {
                     const ESTADO_CONFIG: Record<string, { label: string; bg: string }> = {
-                      recuperado:        { label: "Todo recuperado",   bg: "#16a34a" },
-                      antena_recuperada: { label: "Antena no recuperada", bg: "#2563eb" },
-                      modem_recuperado:  { label: "Módem no recuperado",  bg: "#d97706" },
-                      nada_recuperado:   { label: "Nada recuperado",   bg: "#dc2626" },
+                      recuperado:           { label: "Todo recuperado",      bg: "#16a34a" },
+                      antena_no_recuperada: { label: "Antena no recuperada", bg: "#2563eb" },
+                      modem_no_recuperado:  { label: "Módem no recuperado",  bg: "#d97706" },
+                      nada_recuperado:      { label: "Nada recuperado",      bg: "#dc2626" },
                     };
                     const cfg = item.estado_equipo ? ESTADO_CONFIG[item.estado_equipo] : null;
                     return (
