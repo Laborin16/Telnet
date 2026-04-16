@@ -602,6 +602,17 @@ async def get_tecnicos() -> list:
 
 
 async def get_recoleccion(db: AsyncSession) -> dict:
+    from sqlalchemy import select
+    today = date.today()
+    clientes_data, facturas_data = await asyncio.gather(
+        wisphub_client.get("/api/clientes/", params={"page_size": 1000}),
+        wisphub_client.get("/api/facturas/", params={"page_size": 1000}),
+    )
+    clientes: dict[int, dict] = {}
+    for c in clientes_data.get("results", []):
+        sid = c.get("id_servicio")
+        if sid:
+            clientes[sid] = c
     vmap: dict[int, dict] = {}
     for f in facturas_data.get("results", []):
         if f.get("estado") != "Pendiente de Pago":
