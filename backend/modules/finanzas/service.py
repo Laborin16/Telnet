@@ -614,10 +614,11 @@ async def get_recoleccion(db: AsyncSession) -> dict:
         except ValueError:
             continue
         # Parsear fecha_pago igual que en Cobranza
+        # Parsear fecha_pago
         fp_raw = (f.get("fecha_pago") or "").strip()
-        fp_date: date | None = None
+        fp_date = None
         if fp_raw:
-            for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%d"):
                 try:
                     fp_date = datetime.strptime(fp_raw[:19], fmt).date()
                     break
