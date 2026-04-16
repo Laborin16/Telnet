@@ -602,20 +602,6 @@ async def get_tecnicos() -> list:
 
 
 async def get_recoleccion(db: AsyncSession) -> dict:
-    from sqlalchemy import select
-    today = date.today()
-
-    clientes_data, facturas_data = await asyncio.gather(
-        wisphub_client.get("/api/clientes/", params={"page_size": 1000}),
-        wisphub_client.get("/api/facturas/", params={"page_size": 1000}),
-    )
-
-    clientes: dict[int, dict] = {}
-    for c in clientes_data.get("results", []):
-        sid = c.get("id_servicio")
-        if sid:
-            clientes[sid] = c
-
     vmap: dict[int, dict] = {}
     for f in facturas_data.get("results", []):
         if f.get("estado") != "Pendiente de Pago":
@@ -627,19 +613,29 @@ async def get_recoleccion(db: AsyncSession) -> dict:
             fv = date.fromisoformat(fv_str)
         except ValueError:
             continue
-        dias = (today - fv).days
+        # Parsear fecha_pago igual que en Cobranza
+        fp_raw = (f.get("fecha_pago") or "").strip()
+        fp_date: date | None = None
+        if fp_raw:
+            for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                try:
+                    fp_date = datetime.strptime(fp_raw[:19], fmt).date()
+                    break
+                except ValueError:
+                    continue
+        fecha_ref = fp_date if fp_date else fv
+        dias = (today - fecha_ref).days
         if dias < 7:
             continue
         for art in f.get("articulos", []):
             srv_id = (art.get("servicio") or {}).get("id_servicio")
-            if srv_id and (srv_id not in vmap or fv < date.fromisoformat(vmap[srv_id]["fecha_vencimiento"])):
+            if srv_id and (srv_id not in vmap or fecha_ref < date.fromisoformat(vmap[srv_id]["fecha_vencimiento"])):
                 vmap[srv_id] = {
                     "id_factura": f["id_factura"],
-                    "fecha_vencimiento": fv_str,
+                    "fecha_vencimiento": fecha_ref.isoformat(),
                     "dias_vencido": dias,
                     "total": float(f.get("total") or 0),
                 }
-
     items = []
     for srv_id, fdata in vmap.items():
         c = clientes.get(srv_id, {})

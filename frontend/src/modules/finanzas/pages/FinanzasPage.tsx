@@ -623,7 +623,7 @@ export function FinanzasPage() {
                       <ObservacionCell entityType="pago" entityId={p.id} value={obsHistorial?.[p.id] ?? p.notas} />
                       <td style={td}>
                         {p.comprobante_url
-                          ? <ComprobanteBtn url={`http://localhost:8000${p.comprobante_url}`} />
+                          ? <ComprobanteBtn url={`${import.meta.env.VITE_API_URL ?? ""}${p.comprobante_url}`} />
                           : <span style={{ color: "#94a3b8", fontSize: "12px" }}>—</span>
                         }
                       </td>
