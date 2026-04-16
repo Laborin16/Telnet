@@ -1,10 +1,8 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from core.config import settings
 
-DATABASE_URL = "sqlite+aiosqlite:///./data/wisp_local.db"
-
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(settings.database_url, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
-
 
 async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
