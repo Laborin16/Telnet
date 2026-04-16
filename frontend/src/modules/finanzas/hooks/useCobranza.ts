@@ -324,19 +324,42 @@ export function useRecoleccion() {
 
 export function useGuardarEstadoEquipo() {
   const queryClient = useQueryClient();
-  return useMutation<
-    { id_servicio: number; estado_equipo: string },
-    Error,
-    { id_servicio: number; estado_equipo: string; notas?: string; id_tecnico?: number | null; nombre_tecnico?: string | null }
-  >({
-    mutationFn: async ({ id_servicio, ...data }) => {
+  return useMutation({
+    mutationFn: async ({ id_servicio, ...data }: { id_servicio: number; estado_equipo: string; notas?: string; id_tecnico?: number | null; nombre_tecnico?: string | null }) => {
       const res = await apiClient.post(
         `/api/v1/finanzas/recoleccion/${id_servicio}/estado-equipo`,
         data
       );
       return res.data;
     },
-    onSuccess: () => {
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["recoleccion"] });
+      const previous = queryClient.getQueryData(["recoleccion"]);
+      queryClient.setQueryData(["recoleccion"], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          items: old.items.map((item: any) =>
+            item.id_servicio === variables.id_servicio
+              ? {
+                  ...item,
+                  estado_equipo: variables.estado_equipo,
+                  notas: variables.notas ?? item.notas,
+                  id_tecnico: variables.id_tecnico ?? item.id_tecnico,
+                  nombre_tecnico: variables.nombre_tecnico ?? item.nombre_tecnico,
+                }
+              : item
+          ),
+        };
+      });
+      return { previous };
+    },
+    onError: (_err: any, _variables: any, context: any) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["recoleccion"], context.previous);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["recoleccion"] });
     },
   });
