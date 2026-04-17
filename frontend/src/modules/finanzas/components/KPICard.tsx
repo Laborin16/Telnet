@@ -24,7 +24,7 @@ export function KPICard({ title, value, subtitle, subMetrics, accentColor = "#64
       flexDirection: "column",
       gap: "6px",
       flex: 1,
-      minWidth: "180px",
+      minWidth: "140px",
     }}>
       <span style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
         {title}

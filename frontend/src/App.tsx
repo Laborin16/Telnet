@@ -43,6 +43,18 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
   const [alerta, setAlerta] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showChangePass, setShowChangePass] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const h = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) setSidebarOpen(false);
+    };
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
 
   const debouncedSearch = useDebounce(search, 200);
   const { data: allClients, isLoading, isError } = useAllClients();
@@ -86,11 +98,25 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
       background: "#f1f5f9", overflow: "hidden",
     }}>
 
+      {/* ── Backdrop móvil ───────────────────────────── */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 499 }}
+        />
+      )}
+
       {/* ── Sidebar ──────────────────────────────────── */}
       <aside style={{
         width: "220px", background: "#0f172a",
         display: "flex", flexDirection: "column",
         flexShrink: 0, overflowY: "auto",
+        ...(isMobile ? {
+          position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 500,
+          transform: sidebarOpen ? "translateX(0)" : "translateX(-220px)",
+          transition: "transform 0.25s ease",
+          boxShadow: sidebarOpen ? "4px 0 24px rgba(0,0,0,0.35)" : "none",
+        } : {}),
       }}>
         {/* Brand */}
         <div style={{ padding: "20px 16px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
@@ -115,7 +141,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           {NAV_ITEMS.map(({ key, label, icon }) => {
             const active = tab === key;
             return (
-              <button key={key} onClick={() => setTab(key)} style={{
+              <button key={key} onClick={() => { setTab(key); if (isMobile) setSidebarOpen(false); }} style={{
                 display: "flex", alignItems: "center", gap: "9px",
                 width: "100%", padding: "9px 10px", marginBottom: "2px",
                 borderRadius: "7px", border: "none", cursor: "pointer",
@@ -193,6 +219,14 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           padding: "0 28px", height: "56px", flexShrink: 0,
           display: "flex", alignItems: "center", gap: "14px",
         }}>
+          {isMobile && (
+            <button
+              onClick={() => setSidebarOpen(p => !p)}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: "22px", lineHeight: 1, padding: "4px", color: "#0f172a", flexShrink: 0 }}
+            >
+              ☰
+            </button>
+          )}
           <h1 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "#0f172a" }}>
             {currentNav.label}
           </h1>
@@ -202,7 +236,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
         </header>
 
         {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "14px 12px" : "24px 28px" }}>
 
           {tab === "dashboard" && <DashboardPage />}
           {tab === "finanzas"  && <FinanzasPage />}

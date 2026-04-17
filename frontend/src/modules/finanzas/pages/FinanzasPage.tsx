@@ -246,10 +246,12 @@ export function FinanzasPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
-      <div style={{ display: "flex", gap: "0", border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden", width: "fit-content" }}>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as React.CSSProperties["WebkitOverflowScrolling"] }}>
+        <div style={{ display: "flex", gap: "0", border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden", width: "max-content" }}>
           {(["semana", "dia", "cobranza", "recoleccion", "historial"] as const).map((mode) => (
             <button key={mode} onClick={() => setViewMode(mode)} style={{
               padding: "6px 18px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer",
+              whiteSpace: "nowrap", flexShrink: 0,
               backgroundColor: viewMode === mode ? "#1e40af" : "#f8fafc",
               color: viewMode === mode ? "#fff" : "#64748b",
               borderRight: mode !== "historial" ? "1px solid #e2e8f0" : "none",
@@ -257,17 +259,18 @@ export function FinanzasPage() {
               {mode === "semana" ? "Vista semanal" : mode === "dia" ? "Vista diaria" : mode === "cobranza" ? "Cobranza" : mode === "recoleccion" ? "Recolección" : "Historial"}
             </button>
           ))}
+        </div>
       </div>
       {viewMode === "semana" && (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           <button onClick={goToPrev} disabled={weekStart === weekOptions[weekOptions.length - 1]?.monday} style={navBtn}>‹</button>
-          <select value={weekStart} onChange={(e) => setWeekStart(e.target.value)} style={selectStyle}>
+          <select value={weekStart} onChange={(e) => setWeekStart(e.target.value)} style={{ ...selectStyle, flex: "1 1 200px", minWidth: "0" }}>
             {weekOptions.map((w) => (
               <option key={w.monday} value={w.monday}>{w.monday === currentMonday ? ` ${w.label}` : w.label}</option>
             ))}
           </select>
           <button onClick={goToNext} disabled={isCurrentWeek} style={{ ...navBtn, opacity: isCurrentWeek ? 0.35 : 1, cursor: isCurrentWeek ? "not-allowed" : "pointer" }}>›</button>
-          {weekData && <span style={{ fontSize: "12px", color: "#64748b" }}>{formatFull(weekData.semana_inicio)} → {formatFull(weekData.semana_fin)}</span>}
+          {weekData && <span style={{ fontSize: "12px", color: "#64748b", whiteSpace: "nowrap" }}>{formatFull(weekData.semana_inicio)} → {formatFull(weekData.semana_fin)}</span>}
           {isCurrentWeek && <span style={badgeGreen}>Esta semana</span>}
         </div>
       )}
@@ -280,12 +283,12 @@ export function FinanzasPage() {
               setSelectedDate(e.target.value);
               if (e.target.value > selectedDateFin) setSelectedDateFin(e.target.value);
             }}
-            style={{ fontSize: "13px", fontWeight: 600, color: "#1e293b", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "6px 12px", backgroundColor: "#f8fafc", cursor: "pointer" }}
+            style={{ fontSize: "13px", fontWeight: 600, color: "#1e293b", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "6px 12px", backgroundColor: "#f8fafc", cursor: "pointer", flex: "1 1 130px", minWidth: "0" }}
           />
           <span style={{ fontSize: "13px", color: "#64748b" }}>Hasta:</span>
           <input type="date" value={selectedDateFin} min={selectedDate} max={today}
             onChange={(e) => setSelectedDateFin(e.target.value)}
-            style={{ fontSize: "13px", fontWeight: 600, color: "#1e293b", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "6px 12px", backgroundColor: "#f8fafc", cursor: "pointer" }}
+            style={{ fontSize: "13px", fontWeight: 600, color: "#1e293b", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "6px 12px", backgroundColor: "#f8fafc", cursor: "pointer", flex: "1 1 130px", minWidth: "0" }}
           />
           {selectedDate === today && selectedDateFin === today && <span style={badgeGreen}>Hoy</span>}
           {selectedDate === selectedDateFin && selectedDate !== today && <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 10px", borderRadius: "20px" }}>1 día</span>}
@@ -581,7 +584,7 @@ export function FinanzasPage() {
               placeholder="Buscar por nombre, ID de cliente o folio..."
               value={searchHistorial}
               onChange={(e) => setSearchHistorial(e.target.value)}
-              style={{ ...searchInput, minWidth: "280px" }}
+              style={{ ...searchInput }}
             />
           </div>
 
@@ -731,27 +734,24 @@ function CobranzaAlertas({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       {/* Encabezado */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <p style={sectionLabel}>Alertas de cobranza</p>
           <span style={{ fontSize: "13px", color: "#64748b" }}>
             {alertas.total} cliente{alertas.total !== 1 ? "s" : ""} con facturas vencidas
           </span>
         </div>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button onClick={onRefresh} style={{ fontSize: "12px", padding: "6px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", cursor: "pointer", backgroundColor: "#f8fafc", color: "#475569", fontWeight: 600 }}>
-            Actualizar
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <MultiSelect
+            options={[{ value: "Activo", label: "Activo" }, { value: "Suspendido", label: "Suspendido" }]}
+            selected={filtroEstado}
+            onChange={onFiltroEstado}
+            placeholder="Todos los estados"
+          />
           <button onClick={onWhatsApp} style={{ fontSize: "12px", padding: "6px 16px", borderRadius: "8px", border: "none", cursor: "pointer", backgroundColor: "#25d366", color: "white", fontWeight: 700 }}>
             WhatsApp
           </button>
         </div>
-        <MultiSelect
-          options={[{ value: "Activo", label: "Activo" }, { value: "Suspendido", label: "Suspendido" }]}
-          selected={filtroEstado}
-          onChange={onFiltroEstado}
-          placeholder="Todos los estados"
-        />
       </div>
 
       {/* Tarjetas-tab: clic cambia la tabla activa */}
@@ -768,7 +768,8 @@ function CobranzaAlertas({
                 borderRadius: "12px",
                 padding: "16px 24px",
                 backgroundColor: activa ? t.color : t.bg,
-                minWidth: "160px",
+                minWidth: "140px",
+                flex: "1",
                 cursor: "pointer",
                 textAlign: "left",
                 boxShadow: activa ? `0 4px 12px ${t.color}40` : "none",
@@ -930,9 +931,9 @@ function EmptyState({ text }: { text: string }) {
 }
 
 const navBtn: React.CSSProperties = { padding: "4px 10px", fontSize: "18px", fontWeight: 600, border: "1px solid #e2e8f0", borderRadius: "8px", backgroundColor: "#f8fafc", color: "#374151", cursor: "pointer", lineHeight: 1 };
-const selectStyle: React.CSSProperties = { fontSize: "13px", fontWeight: 600, color: "#1e293b", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "6px 12px", backgroundColor: "#f8fafc", cursor: "pointer", minWidth: "260px" };
+const selectStyle: React.CSSProperties = { fontSize: "13px", fontWeight: 600, color: "#1e293b", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "6px 12px", backgroundColor: "#f8fafc", cursor: "pointer", minWidth: "0" };
 const badgeGreen: React.CSSProperties = { fontSize: "11px", fontWeight: 700, color: "#16a34a", backgroundColor: "#f0fdf4", padding: "2px 10px", borderRadius: "20px" };
-const searchInput: React.CSSProperties = { fontSize: "13px", padding: "6px 12px", borderRadius: "8px", border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", color: "#1e293b", outline: "none", minWidth: "220px" };
+const searchInput: React.CSSProperties = { fontSize: "13px", padding: "6px 12px", borderRadius: "8px", border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", color: "#1e293b", outline: "none", flex: "1 1 180px", minWidth: "0" };
 const searchSelect: React.CSSProperties = { fontSize: "13px", padding: "6px 12px", borderRadius: "8px", border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", color: "#1e293b", cursor: "pointer" };
 const tableStyle: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: "14px" };
 const sectionLabel: React.CSSProperties = { fontSize: "11px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 10px 0" };
