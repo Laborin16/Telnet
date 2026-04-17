@@ -258,14 +258,6 @@ export function FinanzasPage() {
             </button>
           ))}
       </div>
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button
-          onClick={() => setShowWhatsApp(true)}
-          style={{ padding: "8px 16px", borderRadius: "8px", border: "none", backgroundColor: "#25D366", color: "white", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
-        >
-          WhatsApp Recordatorios
-        </button>
-      </div>
       {viewMode === "semana" && (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           <button onClick={goToPrev} disabled={weekStart === weekOptions[weekOptions.length - 1]?.monday} style={navBtn}>‹</button>
@@ -677,9 +669,7 @@ function CobranzaAlertas({
   obs,
   search,
   filtroEstado,
-  onSearch,
   onFiltroEstado,
-  searchRaw,
 }: {
   alertas: import("../hooks/useCobranza").AlertasCobranza | undefined;
   isLoading: boolean;
@@ -756,17 +746,6 @@ function CobranzaAlertas({
             WhatsApp
           </button>
         </div>
-      </div>
-
-      {/* Filtros */}
-      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-        <input
-          type="text"
-          placeholder="Buscar por nombre, teléfono o ID..."
-          value={searchRaw}
-          onChange={(e) => onSearch(e.target.value)}
-          style={searchInput}
-        />
         <MultiSelect
           options={[{ value: "Activo", label: "Activo" }, { value: "Suspendido", label: "Suspendido" }]}
           selected={filtroEstado}

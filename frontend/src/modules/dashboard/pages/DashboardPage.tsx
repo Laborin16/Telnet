@@ -3,7 +3,6 @@ import { useDashboardStats } from "../../finanzas/hooks/useDashboardStats";
 import { useMetodosPagoStats } from "../../finanzas/hooks/useMetodosPagoStats";
 import { KPICard } from "../../finanzas/components/KPICard";
 import { PlanBarChart } from "../../finanzas/components/PlanBarChart";
-import { WhatsAppTestPanel } from "../../finanzas/components/WhatsAppTestPanel";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from "recharts";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
@@ -103,8 +102,6 @@ export function DashboardPage() {
           />
         </div>
       </div>
-
-      <WhatsAppTestPanel />
     </div>
   );
 }
