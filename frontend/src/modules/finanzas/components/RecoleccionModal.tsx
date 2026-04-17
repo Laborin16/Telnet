@@ -6,7 +6,7 @@ const ESTADOS_EQUIPO = [
   { value: "recuperado", label: "Todo recuperado" },
   { value: "antena_no_recuperada", label: "Antena no recuperada" },
   { value: "modem_no_recuperado", label: "Módem no recuperado" },
-  { value: "nada_recuperado", label: "Nada no recuperado" },
+  { value: "nada_recuperado", label: "Nada recuperado" },
 ];
 
 

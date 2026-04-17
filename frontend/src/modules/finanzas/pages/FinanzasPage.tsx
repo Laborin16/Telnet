@@ -134,7 +134,7 @@ export function FinanzasPage() {
   const itemsRecoleccionFiltrados = useMemo(() => {
     if (!recoleccion?.items) return [];
     const ORDEN_ESTADO: Record<string, number> = {
-      recuperado: 0, antena_recuperada: 1, modem_recuperado: 2, nada_recuperado: 3,
+      recuperado: 0, antena_no_recuperada: 1, modem_no_recuperado: 2, nada_recuperado: 3,
     };
     let items = recoleccion.items;
     if (dSearchRecoleccion) {
@@ -471,8 +471,8 @@ export function FinanzasPage() {
       <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>Estado equipo:</span>
       {([
         { key: "recuperado",        label: "Todo recuperado",   color: "#16a34a" },
-        { key: "antena_recuperada", label: "Antena no recuperada", color: "#2563eb" },
-        { key: "modem_recuperado",  label: "Modem no recuperado",  color: "#d97706" },
+        { key: "antena_no_recuperada", label: "Antena no recuperada", color: "#2563eb" },
+        { key: "modem_no_recuperado",  label: "Modem no recuperado",  color: "#d97706" },
         { key: "nada_recuperado",   label: "Nada recuperado",   color: "#dc2626" },
       ] as const).map(({ key, label, color }) => {
         const activo = filtrosRecoleccion.has(key);
