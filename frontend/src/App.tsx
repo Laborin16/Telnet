@@ -123,11 +123,10 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{
               width: "34px", height: "34px", borderRadius: "8px", flexShrink: 0,
-              background: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: "17px",
-            }}>📡</div>
+              overflow: "hidden",
+            }}><img src="/Logo-Telnet.png" alt="Telnet" style={{ width: "100%", height: "100%", objectFit: "contain" }} /></div>
             <div>
-              <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#f8fafc", lineHeight: 1.3 }}>WISP Manager</p>
+              <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#f8fafc", lineHeight: 1.3 }}>SIT</p>
               <p style={{ margin: 0, fontSize: "11px", color: "#64748b", lineHeight: 1.3 }}>Panel de Control</p>
             </div>
           </div>
