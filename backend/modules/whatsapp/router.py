@@ -123,32 +123,43 @@ async def ejecutar(
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
-    facturas_data = await wisphub_client.get("/api/facturas/", params={"page_size": 1000})
-    clientes_data = await wisphub_client.get("/api/clientes/", params={"page_size": 1000})
-    clientes_map = _build_clientes_map(clientes_data)
+    try:
+        facturas_data = await wisphub_client.get("/api/facturas/", params={"page_size": 1000})
+        clientes_data = await wisphub_client.get("/api/clientes/", params={"page_size": 1000})
+        clientes_map = _build_clientes_map(clientes_data)
 
-    facturas = []
-    for f in facturas_data.get("results", []):
-        if f.get("estado") != "Pendiente de Pago":
-            continue
-        _enrich_factura(f, clientes_map)
-        facturas.append(f)
+        facturas = []
+        for f in facturas_data.get("results", []):
+            if f.get("estado") != "Pendiente de Pago":
+                continue
+            _enrich_factura(f, clientes_map)
+            facturas.append(f)
 
-    resultado = await ejecutar_recordatorios(facturas)
+        resultado = await ejecutar_recordatorios(facturas)
 
-    await log_accion(
-        db=db,
-        usuario=usuario,
-        accion="WHATSAPP_RECORDATORIOS",
-        modulo="whatsapp",
-        entidad="recordatorios",
-        descripcion=(
-            f"Enviados: {resultado['enviados']}, "
-            f"Errores: {resultado['errores']}, "
-            f"Sin teléfono: {sum(1 for d in resultado['detalle'] if d['estado'] == 'sin_telefono')}, "
-            f"Suspendidos: {resultado['suspendidos']}"
-        ),
-        datos_extra={"detalle": resultado["detalle"]},
-    )
+        await log_accion(
+            db=db,
+            usuario=usuario,
+            accion="WHATSAPP_RECORDATORIOS",
+            modulo="whatsapp",
+            entidad="recordatorios",
+            descripcion=(
+                f"Enviados: {resultado['enviados']}, "
+                f"Errores: {resultado['errores']}, "
+                f"Sin teléfono: {sum(1 for d in resultado['detalle'] if d['estado'] == 'sin_telefono')}, "
+                f"Suspendidos: {resultado['suspendidos']}"
+            ),
+            datos_extra={"detalle": resultado["detalle"]},
+        )
+        return resultado
 
-    return resultado
+    except Exception as exc:
+        await log_accion(
+            db=db,
+            usuario=usuario,
+            accion="WHATSAPP_RECORDATORIOS",
+            modulo="whatsapp",
+            entidad="recordatorios",
+            descripcion=f"EXCEPCION: {exc}",
+        )
+        raise
