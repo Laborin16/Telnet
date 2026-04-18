@@ -42,8 +42,7 @@ async def enviar_individual(
 
     template = TEMPLATES[dias_key]
     result = await send_template_message(body.phone, template, body.nombre, body.monto)
-    if result["status_code"] not in (200, 201):
-        raise HTTPException(status_code=400, detail=result["body"])
+    exitoso = result["status_code"] in (200, 201)
 
     await log_accion(
         db=db,
@@ -51,8 +50,13 @@ async def enviar_individual(
         accion="WHATSAPP_INDIVIDUAL",
         modulo="whatsapp",
         entidad="mensaje",
-        descripcion=f"Mensaje a {body.nombre} ({body.phone}) — plantilla: {template}",
+        descripcion=f"{'Mensaje enviado' if exitoso else 'ERROR al enviar'} a {body.nombre} ({body.phone}) — plantilla: {template}",
+        datos_extra={"respuesta": result["body"]},
     )
+
+    if not exitoso:
+        raise HTTPException(status_code=400, detail=result["body"])
+
     return result["body"]
 
 
