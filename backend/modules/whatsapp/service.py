@@ -3,7 +3,7 @@ from datetime import date, datetime
 import httpx
 from core.config import settings
 
-GRAPH_URL = f"https://graph.facebook.com/v19.0/{settings.whatsapp_phone_number_id}/messages"
+GRAPH_URL = f"https://graph.facebook.com/v20.0/{settings.whatsapp_phone_number_id}/messages"
 
 HEADERS = {
     "Authorization": f"Bearer {settings.whatsapp_token}",
