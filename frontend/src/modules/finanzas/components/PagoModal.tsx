@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useRegistrarPagoWispHub, useSubirComprobante } from "../hooks/useCobranza";
 import type { ClienteAlerta } from "../hooks/useCobranza";
+import { useEnviarWhatsAppIndividual } from "../hooks/useWhatsApp";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -42,6 +43,13 @@ export function PagoModal({ cliente, onClose }: Props) {
   const { mutate: registrar, isPending, isSuccess, error } = useRegistrarPagoWispHub();
   const errorMsg = error ? ((error as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Error al registrar el pago. Intenta de nuevo.") : null;
   const { mutate: subirComprobante, isPending: subiendo } = useSubirComprobante();
+
+  const { mutate: enviarWA, isPending: waPending, isSuccess: waSuccess, error: waError } = useEnviarWhatsAppIndividual();
+  const waErrorMsg = waError
+    ? ((waError as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+        ? JSON.stringify((waError as { response: { data: { detail: unknown } } }).response.data.detail)
+        : waError.message)
+    : null;
 
   function handleSubmit() {
     const montoNum = parseFloat(monto);
@@ -90,6 +98,36 @@ export function PagoModal({ cliente, onClose }: Props) {
           <p style={infoValue}>{cliente.nombre}</p>
           <p style={infoLabel}>Factura #{cliente.id_factura}</p>
           <p style={infoValue}>Vencida hace {cliente.dias_vencido} día{cliente.dias_vencido !== 1 ? "s" : ""}</p>
+        </div>
+
+        <div style={{ marginTop: "12px" }}>
+          {cliente.telefono ? (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: "#f0fdf4", borderRadius: "8px", border: "1px solid #bbf7d0" }}>
+              <div>
+                <p style={{ fontSize: "11px", fontWeight: 700, color: "#16a34a", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 2px 0" }}>Recordatorio WhatsApp</p>
+                <p style={{ fontSize: "13px", color: "#475569", margin: 0 }}>{cliente.telefono}</p>
+              </div>
+              <button
+                onClick={() => enviarWA({ phone: cliente.telefono!, nombre: cliente.nombre, monto: parseFloat(monto) || cliente.total, dias_vencido: cliente.dias_vencido })}
+                disabled={waPending || waSuccess}
+                style={{
+                  padding: "6px 14px", borderRadius: "6px", border: "none", fontSize: "13px", fontWeight: 600,
+                  cursor: waPending || waSuccess ? "default" : "pointer",
+                  backgroundColor: waSuccess ? "#dcfce7" : waError ? "#fee2e2" : "#25D366",
+                  color: waSuccess ? "#16a34a" : waError ? "#dc2626" : "white",
+                }}
+              >
+                {waPending ? "Enviando..." : waSuccess ? "✓ Enviado" : waError ? "✕ Error" : "Enviar WA"}
+              </button>
+            </div>
+          ) : (
+            <div style={{ padding: "10px 14px", backgroundColor: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+              <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>Sin número de teléfono — no se puede enviar WhatsApp</p>
+            </div>
+          )}
+          {waErrorMsg && (
+            <p style={{ margin: "6px 0 0 0", fontSize: "12px", color: "#dc2626", padding: "0 4px" }}>{waErrorMsg}</p>
+          )}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginTop: "16px" }}>
