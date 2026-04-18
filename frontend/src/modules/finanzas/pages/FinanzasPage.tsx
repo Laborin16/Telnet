@@ -12,6 +12,7 @@ import { RecoleccionModal } from "../components/RecoleccionModal";
 import { ObservacionCell } from "../components/ObservacionCell";
 import { useObservaciones } from "../hooks/useCobranza";
 import { WhatsAppModal } from "../components/WhatsAppModal";
+import { useEnviarWhatsAppIndividual } from "../hooks/useWhatsApp";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 
@@ -662,6 +663,24 @@ function EstadoBadge({ pagada }: { pagada: boolean }) {
   );
 }
 
+function WaBtn({ nombre, telefono, monto, diasVencido }: { nombre: string; telefono: string; monto: number; diasVencido: number }) {
+  const { mutate, isPending, isSuccess, isError } = useEnviarWhatsAppIndividual();
+  return (
+    <button
+      onClick={() => mutate({ phone: telefono, nombre, monto, dias_vencido: diasVencido })}
+      disabled={isPending || isSuccess}
+      title={isSuccess ? "Enviado" : isError ? "Error al enviar" : "Enviar WhatsApp"}
+      style={{
+        padding: "4px 10px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: 600, cursor: isPending || isSuccess ? "default" : "pointer",
+        backgroundColor: isSuccess ? "#dcfce7" : isError ? "#fee2e2" : "#25D366",
+        color: isSuccess ? "#16a34a" : isError ? "#dc2626" : "white",
+      }}
+    >
+      {isPending ? "…" : isSuccess ? "✓" : isError ? "✕" : "WA"}
+    </button>
+  );
+}
+
 function CobranzaAlertas({
   alertas,
   isLoading,
@@ -816,14 +835,24 @@ function CobranzaAlertas({
                     <td style={{ ...td, fontWeight: 700, color: tabCfg.color }}>{c.dias_vencido}</td>
                     <ObservacionCell entityType="factura" entityId={c.id_factura ?? c.id_servicio} value={obs?.[c.id_factura ?? 0]} />
                     <td style={td}>
-                      {c.id_factura ? (
-                        <button
-                          onClick={() => onPago(c as ClientePagoType)}
-                          style={{ padding: "4px 12px", borderRadius: "6px", border: "none", backgroundColor: "#16a34a", color: "white", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
-                        >
-                          Cobrar
-                        </button>
-                      ) : <span style={{ color: "#94a3b8", fontSize: "12px" }}>—</span>}
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        {c.id_factura ? (
+                          <button
+                            onClick={() => onPago(c as ClientePagoType)}
+                            style={{ padding: "4px 12px", borderRadius: "6px", border: "none", backgroundColor: "#16a34a", color: "white", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
+                          >
+                            Cobrar
+                          </button>
+                        ) : <span style={{ color: "#94a3b8", fontSize: "12px" }}>—</span>}
+                        {c.telefono && (
+                          <WaBtn
+                            nombre={c.nombre}
+                            telefono={c.telefono}
+                            monto={(c as ClientePagoType).total ?? 0}
+                            diasVencido={c.dias_vencido}
+                          />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Integer, Boolean, String, DateTime, Float, func, UniqueConstraint
+from sqlalchemy import Integer, Boolean, String, DateTime, Float, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from db.base import Base
 
@@ -12,7 +12,7 @@ class VerificacionPago(Base):
     verificado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     fecha_verificacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     notas: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
 class MetodoPago(str, enum.Enum):
@@ -30,14 +30,14 @@ class PagoRegistrado(Base):
     nombre_cliente: Mapped[str | None] = mapped_column(String(200), nullable=True)
     id_factura: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     monto: Mapped[float] = mapped_column(Float, nullable=False)
-    fecha_pago: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
+    fecha_pago: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
     metodo_pago: Mapped[str] = mapped_column(String(50), nullable=False, default=MetodoPago.no_especificado)
     fecha_pago_real: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     comprobante_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     verificado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     fecha_verificacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     notas: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
 class LogRecordatorio(Base):
@@ -47,7 +47,7 @@ class LogRecordatorio(Base):
     id_cliente: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     id_factura: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     dia_tolerancia: Mapped[int] = mapped_column(Integer, nullable=False)
-    fecha_envio: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    fecha_envio: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     exitoso: Mapped[bool] = mapped_column(Boolean, default=False)
     respuesta_api: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
@@ -65,7 +65,7 @@ class Observacion(Base):
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
     notas: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
 class RecoleccionRegistro(Base):
@@ -75,5 +75,5 @@ class RecoleccionRegistro(Base):
     notas: Mapped[str | None] = mapped_column(String(500), nullable=True)
     id_tecnico: Mapped[int | None] = mapped_column(Integer, nullable=True)
     nombre_tecnico: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)

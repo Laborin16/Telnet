@@ -167,13 +167,13 @@ async def toggle_verificacion(id_factura: int, notas: str | None, db: AsyncSessi
         registro = VerificacionPago(
             id_factura=id_factura,
             verificado=True,
-            fecha_verificacion=datetime.utcnow(),
+            fecha_verificacion=datetime.now(),
             notas=notas,
         )
         db.add(registro)
     else:
         registro.verificado = not registro.verificado
-        registro.fecha_verificacion = datetime.utcnow() if registro.verificado else None
+        registro.fecha_verificacion = datetime.now() if registro.verificado else None
         registro.notas = notas if notas is not None else registro.notas
 
     await db.commit()
@@ -421,7 +421,7 @@ async def registrar_pago(data: dict, db: AsyncSession) -> dict:
         monto=data["monto"],
         metodo_pago=data.get("metodo_pago", "no_especificado"),
         notas=data.get("notas"),
-        fecha_pago=datetime.utcnow(),
+        fecha_pago=datetime.now(),
     )
     db.add(pago)
     await db.commit()
@@ -513,7 +513,7 @@ async def pagar_factura_wisphub(id_factura: int, data: dict, db: AsyncSession | 
                 id_factura=id_factura,
                 monto=float(data["monto"]),
                 metodo_pago=metodo_pago_local,
-                fecha_pago=datetime.utcnow(),
+                fecha_pago=datetime.now(),
                 fecha_pago_real=fecha_pago_real,
             )
             db.add(registro)
@@ -556,7 +556,7 @@ async def upsert_observacion(entity_type: str, entity_id: int, notas: str, db: A
         reg = result.scalar_one_or_none()
         if reg:
             reg.notas = notas or None
-            reg.updated_at = datetime.utcnow()
+            reg.updated_at = datetime.now()
         else:
             reg = RecoleccionRegistro(id_servicio=entity_id, estado_equipo="nada_recuperado", notas=notas or None)
             db.add(reg)
@@ -580,7 +580,7 @@ async def upsert_observacion(entity_type: str, entity_id: int, notas: str, db: A
             db.add(obs)
         else:
             obs.notas = notas or None
-            obs.updated_at = datetime.utcnow()
+            obs.updated_at = datetime.now()
     await db.commit()
     return {"entity_type": entity_type, "entity_id": entity_id, "notas": notas}
 
@@ -714,7 +714,7 @@ async def guardar_estado_equipo(id_servicio: int, data: dict, db: AsyncSession) 
         registro.notas = notas
         registro.id_tecnico = id_tecnico
         registro.nombre_tecnico = nombre_tecnico
-        registro.updated_at = datetime.utcnow()
+        registro.updated_at = datetime.now()
 
     await db.commit()
     await db.refresh(registro)

@@ -1,12 +1,59 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
 from core.dependencies import get_usuario
 from core.wisphub.client import wisphub_client
-from modules.whatsapp.service import ejecutar_recordatorios, _parse_fecha_referencia, SUSPENSION_HABILITADA
+from modules.whatsapp.service import ejecutar_recordatorios, send_template_message, _parse_fecha_referencia, SUSPENSION_HABILITADA, TEMPLATES
 from modules.auditlog.service import log_accion
 
 router = APIRouter()
+
+
+class TestMessageRequest(BaseModel):
+    phone: str
+    template_name: str = "hello_world"
+
+
+@router.post("/test")
+async def test_mensaje(body: TestMessageRequest):
+    result = await send_template_message(body.phone, body.template_name, "Test", 0.0)
+    if result["status_code"] not in (200, 201):
+        raise HTTPException(status_code=400, detail=result["body"])
+    return result["body"]
+
+
+class EnviarIndividualRequest(BaseModel):
+    phone: str
+    nombre: str
+    monto: float
+    dias_vencido: int
+
+
+@router.post("/enviar-individual")
+async def enviar_individual(
+    body: EnviarIndividualRequest,
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    dias_key = body.dias_vencido if body.dias_vencido in TEMPLATES else (4 if body.dias_vencido > 4 else None)
+    if dias_key is None:
+        raise HTTPException(status_code=400, detail="No hay plantilla para este número de días.")
+
+    template = TEMPLATES[dias_key]
+    result = await send_template_message(body.phone, template, body.nombre, body.monto)
+    if result["status_code"] not in (200, 201):
+        raise HTTPException(status_code=400, detail=result["body"])
+
+    await log_accion(
+        db=db,
+        usuario=usuario,
+        accion="WHATSAPP_INDIVIDUAL",
+        modulo="whatsapp",
+        entidad="mensaje",
+        descripcion=f"Mensaje a {body.nombre} ({body.phone}) — plantilla: {template}",
+    )
+    return result["body"]
 
 
 def _build_clientes_map(clientes_data: dict) -> dict[int, dict]:

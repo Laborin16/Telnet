@@ -86,7 +86,7 @@ async def cambiar_password(user_id: int, password_actual: str, password_nuevo: s
     if len(password_nuevo) < 6:
         raise ValueError("La contraseña debe tener al menos 6 caracteres.")
     user.password_hash = hash_password(password_nuevo)
-    user.updated_at = datetime.utcnow()
+    user.updated_at = datetime.now()
     await db.commit()
 
 
@@ -128,7 +128,7 @@ async def sync_usuarios_from_wisphub(db: AsyncSession) -> dict:
         else:
             # Solo actualizar nombre
             existing.nombre = nombre or existing.nombre
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = datetime.now()
             actualizados += 1
 
     await db.commit()

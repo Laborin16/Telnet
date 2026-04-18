@@ -52,3 +52,19 @@ export function useEjecutarRecordatorios() {
     },
   });
 }
+
+interface EnviarIndividualParams {
+  phone: string;
+  nombre: string;
+  monto: number;
+  dias_vencido: number;
+}
+
+export function useEnviarWhatsAppIndividual() {
+  return useMutation<unknown, Error, EnviarIndividualParams>({
+    mutationFn: async (params) => {
+      const res = await apiClient.post("/api/v1/whatsapp/enviar-individual", params);
+      return res.data;
+    },
+  });
+}

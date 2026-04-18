@@ -55,6 +55,10 @@ def _parse_fecha_referencia(f: dict) -> date | None:
     return None
 
 
+_NO_PARAMS_TEMPLATES = {"hello_world"}
+_TEMPLATE_LANG = {**IDIOMA_POR_PLANTILLA, "hello_world": "en_US"}
+
+
 def _build_payload(phone: str, template_name: str, nombre: str, monto: float) -> dict:
     phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
     if not phone_clean.startswith("52"):
@@ -62,23 +66,27 @@ def _build_payload(phone: str, template_name: str, nombre: str, monto: float) ->
     # Números móviles mexicanos requieren "521" (13 dígitos), no "52" (12 dígitos)
     if phone_clean.startswith("52") and not phone_clean.startswith("521") and len(phone_clean) == 12:
         phone_clean = "521" + phone_clean[2:]
+
+    template_obj: dict = {
+        "name": template_name,
+        "language": {"code": _TEMPLATE_LANG.get(template_name, "es_MX")},
+    }
+    if template_name not in _NO_PARAMS_TEMPLATES:
+        template_obj["components"] = [
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "parameter_name": "nombre", "text": nombre},
+                    {"type": "text", "parameter_name": "monto", "text": f"${monto:.2f}"},
+                ],
+            }
+        ]
+
     return {
         "messaging_product": "whatsapp",
         "to": phone_clean,
         "type": "template",
-        "template": {
-            "name": template_name,
-            "language": {"code": IDIOMA_POR_PLANTILLA.get(template_name, "es_MX")},
-            "components": [
-                {
-                    "type": "body",
-                    "parameters": [
-                        {"type": "text", "parameter_name": "nombre", "text": nombre},
-                        {"type": "text", "parameter_name": "monto", "text": f"${monto:.2f}"},
-                    ],
-                }
-            ],
-        },
+        "template": template_obj,
     }
 
 
