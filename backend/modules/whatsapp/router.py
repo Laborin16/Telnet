@@ -41,7 +41,8 @@ async def enviar_individual(
         raise HTTPException(status_code=400, detail="No hay plantilla para este número de días.")
 
     template = TEMPLATES[dias_key]
-    result = await send_template_message(body.phone, template, body.nombre, body.monto)
+    phone = body.phone.split(",")[0].strip()
+    result = await send_template_message(phone, template, body.nombre, body.monto)
     exitoso = result["status_code"] in (200, 201)
 
     await log_accion(
@@ -50,7 +51,7 @@ async def enviar_individual(
         accion="WHATSAPP_INDIVIDUAL",
         modulo="whatsapp",
         entidad="mensaje",
-        descripcion=f"{'Mensaje enviado' if exitoso else 'ERROR al enviar'} a {body.nombre} ({body.phone}) — plantilla: {template}",
+        descripcion=f"{'Mensaje enviado' if exitoso else 'ERROR al enviar'} a {body.nombre} ({phone}) — plantilla: {template}",
         datos_extra={"respuesta": result["body"]},
     )
 
