@@ -5,6 +5,8 @@ services:
     container_name: wisp-backend
     restart: always
     env_file: .env
+    environment:
+      - TZ=America/Hermosillo
     volumes:
       - ./backend/data:/app/data   # persiste la BD SQLite y comprobantes
     networks:
