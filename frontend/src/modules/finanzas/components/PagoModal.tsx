@@ -46,8 +46,8 @@ export function PagoModal({ cliente, onClose }: Props) {
 
   const { mutate: enviarWA, isPending: waPending, isSuccess: waSuccess, error: waError } = useEnviarWhatsAppIndividual();
   const waErrorMsg = waError
-    ? ((waError as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-        ? JSON.stringify((waError as { response: { data: { detail: unknown } } }).response.data.detail)
+    ? ((waError as unknown as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+        ? JSON.stringify((waError as unknown as { response: { data: { detail: unknown } } }).response.data.detail)
         : waError.message)
     : null;
 
