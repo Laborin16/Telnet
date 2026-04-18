@@ -76,8 +76,8 @@ def _build_payload(phone: str, template_name: str, nombre: str, monto: float) ->
             {
                 "type": "body",
                 "parameters": [
-                    {"type": "text", "text": nombre},
-                    {"type": "text", "text": f"${monto:.2f}"},
+                    {"type": "text", "parameter_name": "nombre", "text": nombre},
+                    {"type": "text", "parameter_name": "monto", "text": f"{monto:.2f}"},
                 ],
             }
         ]

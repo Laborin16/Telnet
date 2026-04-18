@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, DateTime
+from sqlalchemy import Integer, String, DateTime, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from db.base import Base
 
@@ -16,5 +16,5 @@ class AuditLog(Base):
     entidad: Mapped[str] = mapped_column(String(100), nullable=False)
     entidad_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     descripcion: Mapped[str] = mapped_column(String(1000), nullable=False)
-    datos_extra: Mapped[str | None] = mapped_column(String(2000), nullable=True)  # JSON serializado
+    datos_extra: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
