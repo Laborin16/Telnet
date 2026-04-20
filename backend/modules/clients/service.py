@@ -62,8 +62,8 @@ class ClientService:
 
     async def list_clients(self, page: int = 1, page_size: int = 25, status: str = None, search: str = None) -> dict:
         clients_raw, facturas_raw = await asyncio.gather(
-            self.wisphub.get("/api/clientes/", params={}),
-            self.wisphub.get("/api/facturas/", params={"page_size": 1000}),
+            self.wisphub.get_all("/api/clientes/"),
+            self.wisphub.get_all("/api/facturas/"),
         )
         response = ClientListResponse(**clients_raw)
         vmap = _build_vencimiento_map(facturas_raw)
@@ -103,7 +103,7 @@ class ClientService:
     async def get_client(self, client_id: int) -> dict:
         detail_raw, facturas_raw = await asyncio.gather(
             self.wisphub.get(f"/api/clientes/{client_id}/"),
-            self.wisphub.get("/api/facturas/", params={"page_size": 1000}),
+            self.wisphub.get_all("/api/facturas/"),
         )
         detail = ClientDetail(**detail_raw)
         vmap = _build_vencimiento_map(facturas_raw)
