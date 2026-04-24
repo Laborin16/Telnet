@@ -849,6 +849,14 @@ async def get_reporte_semanal_data(fecha_inicio: str, fecha_fin: str, db: AsyncS
                 if (today - fecha_ref).days >= 7:
                     en_recoleccion.add(srv_id)
 
+    _estado_cliente: dict[int, str] = {
+        c.get("id_servicio"): c.get("estado", "")
+        for c in clientes
+        if c.get("id_servicio")
+    }
+    activos_con_deuda     = sum(1 for sid in pendientes_pago_ids if _estado_cliente.get(sid) == "Activo")
+    suspendidos_con_deuda = sum(1 for sid in pendientes_pago_ids if _estado_cliente.get(sid) == "Suspendido")
+
     def pct(n: int, total: int) -> float:
         return round(n / total * 100, 1) if total else 0.0
 
@@ -875,8 +883,12 @@ async def get_reporte_semanal_data(fecha_inicio: str, fecha_fin: str, db: AsyncS
             "pct_cancelados": pct(cancelados, total_clientes),
             # Sección B: indicadores de cartera (pueden solaparse con A)
             "pendientes_de_pago": len(pendientes_pago_ids),
+            "activos_con_deuda": activos_con_deuda,
+            "suspendidos_con_deuda": suspendidos_con_deuda,
             "en_recoleccion": len(en_recoleccion),
             "pct_pendientes_de_pago": pct(len(pendientes_pago_ids), total_clientes),
+            "pct_activos_con_deuda": pct(activos_con_deuda, total_clientes),
+            "pct_suspendidos_con_deuda": pct(suspendidos_con_deuda, total_clientes),
             "pct_en_recoleccion": pct(len(en_recoleccion), total_clientes),
         },
     }
@@ -951,49 +963,57 @@ def generar_excel_reporte(data: dict) -> bytes:
         ws1.column_dimensions[get_column_letter(col)].width = w
 
     # ── Hoja 2: Por Método de Pago ─────────────────────────────────────────
-    ws2 = wb.create_sheet("Por Método de Pago")
-    _excel_header_style(ws2, 1, 4, "Ingresos por Método de Pago — desglose por cuenta", "15803D")
-    ws2.append([])
-    _excel_col_headers(ws2, 3, ["Método de Pago", "Cuenta", "Pagos", "Total cobrado"])
+    total_local_count = sum(m["count"] for m in data["por_metodo"])
+    total_local_monto = round(sum(m["total"] for m in data["por_metodo"]), 2)
 
-    total_local_count = 0
-    total_local_monto = 0.0
+    ws2 = wb.create_sheet("Por Método de Pago")
+    _excel_header_style(ws2, 1, 3, "Ingresos por Método de Pago", "15803D")
+    ws2.append([])
+    _excel_col_headers(ws2, 3, ["Método de Pago", "Pagos", "Total cobrado"])
+    for m in data["por_metodo"]:
+        ws2.append([m["metodo"], m["count"], m["total"]])
+        ws2.cell(row=ws2.max_row, column=3).number_format = MXN
+    tr2a = ws2.max_row + 1
+    ws2.append(["TOTAL", total_local_count, total_local_monto])
+    ws2.cell(row=tr2a, column=3).number_format = MXN
+    for col in range(1, 4):
+        c2 = ws2.cell(row=tr2a, column=col)
+        c2.font = Font(bold=True)
+        c2.fill = PatternFill("solid", fgColor="DCFCE7")
+    for col, w in enumerate([26, 10, 18], start=1):
+        ws2.column_dimensions[get_column_letter(col)].width = w
+
+    # ── Hoja 3: Desglose por Cuenta ───────────────────────────────────────
+    ws2b = wb.create_sheet("Desglose por Cuenta")
+    _excel_header_style(ws2b, 1, 4, "Desglose por Cuenta", "15803D")
+    ws2b.append([])
+    _excel_col_headers(ws2b, 3, ["Método de Pago", "Cuenta", "Pagos", "Total cobrado"])
     for m in data["por_metodo"]:
         cuentas = m["cuentas"]
         first = True
         for c in cuentas:
-            ws2.append([
-                m["metodo"] if first else "",
-                c["cuenta"],
-                c["count"],
-                c["total"],
-            ])
-            ws2.cell(row=ws2.max_row, column=4).number_format = MXN
+            ws2b.append([m["metodo"] if first else "", c["cuenta"], c["count"], c["total"]])
+            ws2b.cell(row=ws2b.max_row, column=4).number_format = MXN
             if first:
                 first = False
-        # Subtotal del método si tiene más de 1 cuenta
         if len(cuentas) > 1:
-            ws2.append(["", f"Subtotal {m['metodo']}", m["count"], m["total"]])
-            ws2.cell(row=ws2.max_row, column=4).number_format = MXN
+            ws2b.append(["", f"Subtotal {m['metodo']}", m["count"], m["total"]])
+            ws2b.cell(row=ws2b.max_row, column=4).number_format = MXN
             for col in range(1, 5):
-                ws2.cell(row=ws2.max_row, column=col).font = Font(bold=True, italic=True)
-                ws2.cell(row=ws2.max_row, column=col).fill = PatternFill("solid", fgColor="ECFDF5")
-        ws2.append([])  # separador visual
-        total_local_count += m["count"]
-        total_local_monto += m["total"]
-
-    tr2 = ws2.max_row + 1
-    ws2.append(["TOTAL", "", total_local_count, round(total_local_monto, 2)])
-    ws2.cell(row=tr2, column=4).number_format = MXN
+                ws2b.cell(row=ws2b.max_row, column=col).font = Font(bold=True, italic=True)
+                ws2b.cell(row=ws2b.max_row, column=col).fill = PatternFill("solid", fgColor="ECFDF5")
+        ws2b.append([])
+    tr2b = ws2b.max_row + 1
+    ws2b.append(["TOTAL", "", total_local_count, total_local_monto])
+    ws2b.cell(row=tr2b, column=4).number_format = MXN
     for col in range(1, 5):
-        c2 = ws2.cell(row=tr2, column=col)
+        c2 = ws2b.cell(row=tr2b, column=col)
         c2.font = Font(bold=True)
         c2.fill = PatternFill("solid", fgColor="DCFCE7")
-
     for col, w in enumerate([26, 22, 10, 18], start=1):
-        ws2.column_dimensions[get_column_letter(col)].width = w
+        ws2b.column_dimensions[get_column_letter(col)].width = w
 
-    # ── Hoja 3: Resumen de Clientes ────────────────────────────────────────
+    # ── Hoja 4: Resumen de Clientes ────────────────────────────────────────
     ws3 = wb.create_sheet("Resumen Clientes")
     _excel_header_style(ws3, 1, 3, "Resumen de Clientes", "7C3AED")
     ws3.append([])  # fila 2
@@ -1013,7 +1033,7 @@ def generar_excel_reporte(data: dict) -> bytes:
 
     total_estado = rc["activos"] + rc["suspendidos"] + rc["cancelados"]
     pct_estado = round(total_estado / rc["total_real"] * 100, 1) if rc["total_real"] else 0
-    ws3.append(["TOTAL (catalogados)", total_estado, f"{pct_estado}%"])
+    ws3.append(["TOTAL", total_estado, f"{pct_estado}%"])
     for col in range(1, 4):
         c = ws3.cell(row=ws3.max_row, column=col)
         c.font = Font(bold=True)
@@ -1022,29 +1042,23 @@ def generar_excel_reporte(data: dict) -> bytes:
     # — Separador —
     ws3.append([])
     sep_row = ws3.max_row + 1
-    ws3.append(["INDICADORES DE CARTERA  (*)", "", ""])
+    ws3.append(["INDICADORES DE CARTERA", "", ""])
     ws3.merge_cells(f"A{sep_row}:C{sep_row}")
     sep_cell = ws3.cell(row=sep_row, column=1)
     sep_cell.font = Font(bold=True, size=10, color="92400E")
     sep_cell.fill = PatternFill("solid", fgColor="FEF3C7")
     sep_cell.alignment = Alignment(horizontal="center")
 
-    # — Sección B: Indicadores (informativos, pueden solaparse con A) —
+    # — Sección B: Indicadores de cartera —
     indicador_rows = [
-        ("Con deuda pendiente",      rc["pendientes_de_pago"], rc["pct_pendientes_de_pago"], "FEF9C3"),
-        ("En recolección (7+ días)", rc["en_recoleccion"],     rc["pct_en_recoleccion"],     "EDE9FE"),
+        ("Activos con deuda",        rc["activos_con_deuda"],     rc["pct_activos_con_deuda"],     "FEF9C3"),
+        ("Suspendidos con deuda",    rc["suspendidos_con_deuda"], rc["pct_suspendidos_con_deuda"], "FEF9C3"),
+        ("En recolección (7+ días)", rc["en_recoleccion"],        rc["pct_en_recoleccion"],        "EDE9FE"),
     ]
     for label, qty, pct_val, fill in indicador_rows:
         ws3.append([label, qty, f"{pct_val}%"])
         for col in range(1, 4):
             ws3.cell(row=ws3.max_row, column=col).fill = PatternFill("solid", fgColor=fill)
-
-    ws3.append([])
-    note_row = ws3.max_row + 1
-    ws3.append(["(*) Un mismo cliente puede aparecer en varios indicadores y en cualquier estado del servicio.", "", ""])
-    ws3.merge_cells(f"A{note_row}:C{note_row}")
-    note_cell = ws3.cell(row=note_row, column=1)
-    note_cell.font = Font(italic=True, size=9, color="64748B")
 
     for col, w in enumerate([32, 12, 14], start=1):
         ws3.column_dimensions[get_column_letter(col)].width = w
@@ -1173,44 +1187,59 @@ def generar_pdf_reporte(data: dict) -> bytes:
     elems.append(Spacer(1, 0.2 * inch))
 
     # ── Por Método de Pago ─────────────────────────────────────────────────
-    elems.append(Paragraph("Ingresos por Método de Pago — desglose por cuenta", section_style))
-    met_rows = []
-    total_local_count = 0
-    total_local_monto = 0.0
+    total_local_count = sum(m["count"] for m in data["por_metodo"])
+    total_local_monto = sum(m["total"] for m in data["por_metodo"])
+
+    elems.append(Paragraph("Ingresos por Método de Pago", section_style))
+    met1_rows = [[m["metodo"], str(m["count"]), f"${m['total']:,.2f}"] for m in data["por_metodo"]]
+    met1_rows.append(["TOTAL", str(total_local_count), f"${total_local_monto:,.2f}"])
+    met1_t = make_table(
+        ["Método de Pago", "Pagos", "Total cobrado"],
+        met1_rows,
+        [2.5 * inch, 1.0 * inch, 2.7 * inch],
+        GREEN,
+    )
+    last_m1 = len(met1_rows)
+    met1_t.setStyle(TableStyle([
+        ("FONTNAME",   (0, last_m1), (-1, last_m1), "Helvetica-Bold"),
+        ("BACKGROUND", (0, last_m1), (-1, last_m1), colors.HexColor("#DCFCE7")),
+    ]))
+    elems.append(met1_t)
+    elems.append(Spacer(1, 0.15 * inch))
+
+    elems.append(Paragraph("Desglose por Cuenta", section_style))
+    met2_rows = []
     subtotal_rows: list[int] = []
     for m in data["por_metodo"]:
         cuentas = m["cuentas"]
         for i, c in enumerate(cuentas):
-            met_rows.append([
+            met2_rows.append([
                 m["metodo"] if i == 0 else "",
                 c["cuenta"],
                 str(c["count"]),
                 f"${c['total']:,.2f}",
             ])
         if len(cuentas) > 1:
-            subtotal_rows.append(len(met_rows) + 1)  # +1 for header offset
-            met_rows.append(["", f"  Subtotal", str(m["count"]), f"${m['total']:,.2f}"])
-        total_local_count += m["count"]
-        total_local_monto += m["total"]
-
-    met_rows.append(["TOTAL", "", str(total_local_count), f"${total_local_monto:,.2f}"])
-    met_t = make_table(
+            subtotal_rows.append(len(met2_rows) + 1)
+            met2_rows.append(["", "  Subtotal", str(m["count"]), f"${m['total']:,.2f}"])
+    met2_rows.append(["TOTAL", "", str(total_local_count), f"${total_local_monto:,.2f}"])
+    met2_t = make_table(
         ["Método de Pago", "Cuenta", "Pagos", "Total cobrado"],
-        met_rows,
+        met2_rows,
         [1.8 * inch, 1.7 * inch, 0.8 * inch, 1.9 * inch],
         GREEN,
     )
-    last_m = len(met_rows)
-    met_t.setStyle(TableStyle([
-        ("FONTNAME",   (0, last_m), (-1, last_m), "Helvetica-Bold"),
-        ("BACKGROUND", (0, last_m), (-1, last_m), colors.HexColor("#DCFCE7")),
+    last_m2 = len(met2_rows)
+    met2_t.setStyle(TableStyle([
+        ("FONTNAME",   (0, last_m2), (-1, last_m2), "Helvetica-Bold"),
+        ("BACKGROUND", (0, last_m2), (-1, last_m2), colors.HexColor("#DCFCE7")),
     ]))
     for sr in subtotal_rows:
-        met_t.setStyle(TableStyle([
+        met2_t.setStyle(TableStyle([
             ("FONTNAME",   (0, sr), (-1, sr), "Helvetica-BoldOblique"),
             ("BACKGROUND", (0, sr), (-1, sr), colors.HexColor("#ECFDF5")),
         ]))
-    elems.append(met_t)
+    elems.append(met2_t)
     elems.append(Spacer(1, 0.2 * inch))
 
     # ── Resumen de Clientes ────────────────────────────────────────────────
@@ -1224,7 +1253,7 @@ def generar_pdf_reporte(data: dict) -> bytes:
         ["Activos",     str(rc["activos"]),     f"{rc['pct_activos']}%"],
         ["Suspendidos", str(rc["suspendidos"]),  f"{rc['pct_suspendidos']}%"],
         ["Cancelados",  str(rc["cancelados"]),   f"{rc['pct_cancelados']}%"],
-        ["TOTAL catalogados", str(total_estado), f"{pct_estado}%"],
+        ["TOTAL", str(total_estado), f"{pct_estado}%"],
     ]
     cli_t = make_table(
         ["Estado del Servicio", "Clientes", "% del total"],
@@ -1240,24 +1269,20 @@ def generar_pdf_reporte(data: dict) -> bytes:
     elems.append(cli_t)
     elems.append(Spacer(1, 0.15 * inch))
 
-    # Tabla B: Indicadores de cartera (informativos, pueden solaparse)
+    # Tabla B: Indicadores de cartera
     AMBER = colors.HexColor("#B45309")
     ind_rows = [
-        ["Con deuda pendiente",      str(rc["pendientes_de_pago"]), f"{rc['pct_pendientes_de_pago']}%"],
-        ["En recolección (7+ días)", str(rc["en_recoleccion"]),     f"{rc['pct_en_recoleccion']}%"],
+        ["Activos con deuda",        str(rc["activos_con_deuda"]),     f"{rc['pct_activos_con_deuda']}%"],
+        ["Suspendidos con deuda",    str(rc["suspendidos_con_deuda"]), f"{rc['pct_suspendidos_con_deuda']}%"],
+        ["En recolección (7+ días)", str(rc["en_recoleccion"]),        f"{rc['pct_en_recoleccion']}%"],
     ]
     ind_t = make_table(
-        ["Indicadores de Cartera (*)", "Clientes", "% del total"],
+        ["Indicadores de Cartera", "Clientes", "% del total"],
         ind_rows,
         [2.8 * inch, 1.3 * inch, 2.1 * inch],
         AMBER,
     )
     elems.append(ind_t)
-    elems.append(Paragraph(
-        "(*) Un cliente puede tener deuda pendiente y pertenecer a cualquier estado del servicio.",
-        ParagraphStyle("nota", parent=styles["Normal"],
-                       textColor=colors.HexColor("#92400E"), fontSize=8, spaceAfter=4),
-    ))
     elems.append(Spacer(1, 0.2 * inch))
 
     # ── Pie ────────────────────────────────────────────────────────────────
