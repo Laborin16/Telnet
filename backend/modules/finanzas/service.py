@@ -767,14 +767,16 @@ async def get_reporte_semanal_data(fecha_inicio: str, fecha_fin: str, db: AsyncS
 
     # 2) Pagos locales (PagoRegistrado) NO cubiertos por WispHub en el mismo rango
     from sqlalchemy import or_, and_, func
-    inicio_dt = datetime.combine(date.fromisoformat(fecha_inicio), datetime.min.time())
-    fin_dt    = datetime.combine(date.fromisoformat(fecha_fin),    datetime.max.time())
+    date_inicio = date.fromisoformat(fecha_inicio)
+    date_fin    = date.fromisoformat(fecha_fin)
+    inicio_dt = datetime.combine(date_inicio, datetime.min.time())
+    fin_dt    = datetime.combine(date_fin,    datetime.max.time())
     res_pagos = await db.execute(
         select(PagoRegistrado).where(
             or_(
                 and_(
                     PagoRegistrado.fecha_pago_real.isnot(None),
-                    func.date(PagoRegistrado.fecha_pago_real).between(fecha_inicio, fecha_fin),
+                    func.date(PagoRegistrado.fecha_pago_real).between(date_inicio, date_fin),
                 ),
                 and_(
                     PagoRegistrado.fecha_pago_real.is_(None),
