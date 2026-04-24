@@ -4,10 +4,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=laborin
-WorkingDirectory=/home/laborin/wisp-manager/backend
-EnvironmentFile=/home/laborin/wisp-manager/.env
-ExecStart=/home/laborin/wisp-manager/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
+User=telnet
+WorkingDirectory=/opt/wisp-manager/backend
+EnvironmentFile=/opt/wisp-manager/.env
+ExecStart=/opt/wisp-manager/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
 Restart=always
 RestartSec=5
 
