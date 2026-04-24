@@ -1172,7 +1172,7 @@ def generar_pdf_reporte(data: dict) -> bytes:
         f"${data['total_pendiente']:,.2f}",
     ])
     dia_t = make_table(
-        ["Fecha", "Cobradas", "Total cobrado", "Pendientes", "Total pendiente"],
+        ["Fecha", "Pagos recibidos", "Total cobrado", "Pagos pendientes", "Total pendiente"],
         dia_rows,
         [1.4 * inch, 1.1 * inch, 1.5 * inch, 1.1 * inch, 1.5 * inch],
         PRIMARY,
