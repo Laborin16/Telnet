@@ -44,7 +44,7 @@ export function PlanBarChart({ data, title, color = "#1e40af", onBarClick }: Pro
           <Bar
             dataKey="count"
             radius={[0, 4, 4, 0]}
-            onClick={onBarClick ? (entry: Item) => onBarClick(entry.nombre) : undefined}
+            onClick={onBarClick ? (entry: unknown) => onBarClick((entry as Item).nombre) : undefined}
           >
             {data.map((_, i) => (
               <Cell key={i} fill={i === 0 ? color : "#93c5fd"} />
