@@ -14,5 +14,6 @@ class Usuario(Base):
     password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     es_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    debe_cambiar_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)

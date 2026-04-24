@@ -12,6 +12,8 @@ import { RecoleccionModal } from "../components/RecoleccionModal";
 import { ObservacionCell } from "../components/ObservacionCell";
 import { useObservaciones } from "../hooks/useCobranza";
 import { WhatsAppModal } from "../components/WhatsAppModal";
+import { useDownloadReporte } from "../hooks/useWeeklyReport";
+import type { ReportFormat } from "../hooks/useWeeklyReport";
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 
@@ -95,6 +97,7 @@ export function FinanzasPage() {
   const [clientePago, setClientePago] = useState<ClientePagoType | null>(null);
   const [itemRecoleccion, setItemRecoleccion] = useState<ItemRecoleccion | null>(null);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
+  const [showReporte, setShowReporte] = useState(false);
   const [filtrosRecoleccion, setFiltrosRecoleccion] = useState<Set<string>>(new Set());
   const { data: recoleccion, isLoading: recoleccionLoading } = useRecoleccion();
 
@@ -292,6 +295,20 @@ export function FinanzasPage() {
           />
           {selectedDate === today && selectedDateFin === today && <span style={badgeGreen}>Hoy</span>}
           {selectedDate === selectedDateFin && selectedDate !== today && <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", backgroundColor: "#f1f5f9", padding: "2px 10px", borderRadius: "20px" }}>1 día</span>}
+          <button
+            onClick={() => setShowReporte(true)}
+            style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "6px 14px", borderRadius: "8px", border: "none", cursor: "pointer",
+              background: "linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)",
+              color: "white", fontSize: "13px", fontWeight: 700,
+              boxShadow: "0 2px 8px rgba(30,64,175,0.35)",
+              whiteSpace: "nowrap", flexShrink: 0,
+            }}
+          >
+            <span style={{ fontSize: "15px" }}>📊</span>
+            Reporte Semanal
+          </button>
         </div>
       )}
 
@@ -642,6 +659,207 @@ export function FinanzasPage() {
       )}
 
       {showWhatsApp && <WhatsAppModal onClose={() => setShowWhatsApp(false)} />}
+
+      {showReporte && (
+        <ReporteSemanalModal
+          defaultFechaInicio={selectedDate}
+          defaultFechaFin={selectedDateFin}
+          weekOptions={weekOptions}
+          onClose={() => setShowReporte(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReporteSemanalModal({
+  defaultFechaInicio,
+  defaultFechaFin,
+  weekOptions,
+  onClose,
+}: {
+  defaultFechaInicio: string;
+  defaultFechaFin: string;
+  weekOptions: WeekOption[];
+  onClose: () => void;
+}) {
+  const [modo, setModo] = useState<"semana" | "rango">("semana");
+  const [weekSelected, setWeekSelected] = useState<string>(weekOptions[0]?.monday ?? defaultFechaInicio);
+  const [fechaInicio, setFechaInicio] = useState(defaultFechaInicio);
+  const [fechaFin, setFechaFin] = useState(defaultFechaFin);
+  const { download, isLoading, error } = useDownloadReporte();
+
+  const getRange = () => {
+    if (modo === "semana") {
+      const sun = new Date(weekSelected + "T12:00:00");
+      sun.setDate(sun.getDate() + 6);
+      return { inicio: weekSelected, fin: toISODate(sun) };
+    }
+    return { inicio: fechaInicio, fin: fechaFin };
+  };
+
+  const handleDownload = async (format: ReportFormat) => {
+    const { inicio, fin } = getRange();
+    await download(inicio, fin, format);
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, backgroundColor: "rgba(15,23,42,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 3000,
+        backdropFilter: "blur(2px)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: "white", borderRadius: "16px", padding: "28px",
+          width: "480px", maxWidth: "95vw",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{
+              width: "40px", height: "40px", borderRadius: "10px",
+              background: "linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "20px", flexShrink: 0,
+            }}>📊</div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#1e293b" }}>
+                Generar Reporte Semanal
+              </h2>
+              <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                Ingresos + resumen de clientes · Excel o PDF
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", fontSize: "20px", color: "#94a3b8", lineHeight: 1, padding: "2px" }}
+          >✕</button>
+        </div>
+
+        {/* Selector de modo */}
+        <div style={{
+          display: "flex", gap: "0", border: "1px solid #e2e8f0",
+          borderRadius: "10px", overflow: "hidden", marginBottom: "16px",
+        }}>
+          {(["semana", "rango"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setModo(m)}
+              style={{
+                flex: 1, padding: "9px 0", fontSize: "13px", fontWeight: 600,
+                border: "none", cursor: "pointer",
+                backgroundColor: modo === m ? "#1e40af" : "#f8fafc",
+                color: modo === m ? "white" : "#64748b",
+                borderRight: m === "semana" ? "1px solid #e2e8f0" : "none",
+                transition: "background 0.15s",
+              }}
+            >
+              {m === "semana" ? "Por Semana" : "Rango de Fechas"}
+            </button>
+          ))}
+        </div>
+
+        {/* Controles de período */}
+        {modo === "semana" ? (
+          <select
+            value={weekSelected}
+            onChange={(e) => setWeekSelected(e.target.value)}
+            style={{
+              width: "100%", fontSize: "13px", fontWeight: 600, color: "#1e293b",
+              border: "1px solid #e2e8f0", borderRadius: "8px",
+              padding: "9px 12px", backgroundColor: "#f8fafc",
+              marginBottom: "20px", boxSizing: "border-box", cursor: "pointer",
+            }}
+          >
+            {weekOptions.map((w) => (
+              <option key={w.monday} value={w.monday}>{w.label}</option>
+            ))}
+          </select>
+        ) : (
+          <div style={{ display: "flex", gap: "12px", marginBottom: "20px" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: "12px", color: "#64748b", display: "block", marginBottom: "4px", fontWeight: 600 }}>
+                Desde
+              </label>
+              <input
+                type="date"
+                value={fechaInicio}
+                max={fechaFin}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                style={{
+                  width: "100%", fontSize: "13px", border: "1px solid #e2e8f0",
+                  borderRadius: "8px", padding: "9px 12px", backgroundColor: "#f8fafc",
+                  boxSizing: "border-box", cursor: "pointer",
+                }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: "12px", color: "#64748b", display: "block", marginBottom: "4px", fontWeight: 600 }}>
+                Hasta
+              </label>
+              <input
+                type="date"
+                value={fechaFin}
+                min={fechaInicio}
+                max={today}
+                onChange={(e) => setFechaFin(e.target.value)}
+                style={{
+                  width: "100%", fontSize: "13px", border: "1px solid #e2e8f0",
+                  borderRadius: "8px", padding: "9px 12px", backgroundColor: "#f8fafc",
+                  boxSizing: "border-box", cursor: "pointer",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Mensaje de error */}
+        {error && (
+          <p style={{ color: "#dc2626", fontSize: "12px", marginBottom: "12px", textAlign: "center" }}>{error}</p>
+        )}
+
+        {/* Botones de descarga */}
+        <div style={{ display: "flex", gap: "12px" }}>
+          <button
+            onClick={() => handleDownload("excel")}
+            disabled={isLoading}
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+              padding: "11px 0", borderRadius: "9px",
+              border: "1.5px solid #16a34a", backgroundColor: isLoading ? "#f1f5f9" : "#f0fdf4",
+              color: "#15803d", fontWeight: 700, cursor: isLoading ? "wait" : "pointer",
+              fontSize: "13px", transition: "background 0.15s",
+            }}
+          >
+            {isLoading ? "⏳ Generando..." : <><span>📥</span> Excel (.xlsx)</>}
+          </button>
+          <button
+            onClick={() => handleDownload("pdf")}
+            disabled={isLoading}
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+              padding: "11px 0", borderRadius: "9px",
+              border: "1.5px solid #dc2626", backgroundColor: isLoading ? "#f1f5f9" : "#fef2f2",
+              color: "#dc2626", fontWeight: 700, cursor: isLoading ? "wait" : "pointer",
+              fontSize: "13px", transition: "background 0.15s",
+            }}
+          >
+            {isLoading ? "⏳ Generando..." : <><span>📄</span> PDF</>}
+          </button>
+        </div>
+
+        <p style={{ fontSize: "11px", color: "#94a3b8", textAlign: "center", marginTop: "14px", marginBottom: 0 }}>
+          El reporte incluye ingresos por día, por método de pago y resumen de clientes.
+        </p>
+      </div>
     </div>
   );
 }
@@ -673,6 +891,8 @@ function CobranzaAlertas({
   search,
   filtroEstado,
   onFiltroEstado,
+  onSearch,
+  searchRaw,
 }: {
   alertas: import("../hooks/useCobranza").AlertasCobranza | undefined;
   isLoading: boolean;
@@ -741,7 +961,18 @@ function CobranzaAlertas({
             {alertas.total} cliente{alertas.total !== 1 ? "s" : ""} con facturas vencidas
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <input
+            type="text"
+            value={searchRaw}
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder="Buscar cliente, teléfono o ID..."
+            style={{
+              padding: "6px 12px", borderRadius: "8px", border: "1px solid #e2e8f0",
+              fontSize: "13px", color: "#1e293b", outline: "none", width: "220px",
+              backgroundColor: "#f8fafc",
+            }}
+          />
           <MultiSelect
             options={[{ value: "Activo", label: "Activo" }, { value: "Suspendido", label: "Suspendido" }]}
             selected={filtroEstado}

@@ -14,7 +14,19 @@ export interface MetodosPagoStats {
   deposito: CuentaStat[];
 }
 
-export function useMetodosPagoStats(search = ""): MetodosPagoStats {
+function inDateRange(dateStr: string | null | undefined, from: string | null, to: string | null): boolean {
+  if (!dateStr) return false;
+  const d = dateStr.slice(0, 10);
+  if (from && d < from) return false;
+  if (to && d > to) return false;
+  return true;
+}
+
+export function useMetodosPagoStats(
+  search = "",
+  dateFrom: string | null = null,
+  dateTo: string | null = null,
+): MetodosPagoStats {
   const { data, isLoading } = useHistorialPagos(search);
 
   return useMemo(() => {
@@ -27,11 +39,18 @@ export function useMetodosPagoStats(search = ""): MetodosPagoStats {
 
     if (!data) return empty;
 
+    const hasPeriod = dateFrom || dateTo;
+    const items = hasPeriod
+      ? data.items.filter((p) =>
+          inDateRange(p.fecha_pago_real ?? p.fecha_registro, dateFrom, dateTo),
+        )
+      : data.items;
+
     const efectivo = { monto: 0, count: 0 };
     const transMap = new Map<string, CuentaStat>();
     const deposMap = new Map<string, CuentaStat>();
 
-    for (const p of data.items) {
+    for (const p of items) {
       const metodo = p.metodo_pago ?? "";
       const monto = p.monto ?? 0;
 
@@ -59,5 +78,5 @@ export function useMetodosPagoStats(search = ""): MetodosPagoStats {
       transferencia: [...transMap.values()].sort((a, b) => b.monto - a.monto),
       deposito: [...deposMap.values()].sort((a, b) => b.monto - a.monto),
     };
-  }, [data, isLoading]);
+  }, [data, isLoading, dateFrom, dateTo]);
 }

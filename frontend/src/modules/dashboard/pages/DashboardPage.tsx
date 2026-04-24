@@ -12,12 +12,16 @@ function pct(part: number, total: number) {
   return `${Math.round((part / total) * 100)}%`;
 }
 
-export function DashboardPage() {
+interface DashboardPageProps {
+  onNavigateToClients: (filter: { plan?: string; zona?: string }) => void;
+}
+
+export function DashboardPage({ onNavigateToClients }: DashboardPageProps) {
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
 
   const stats = useDashboardStats(dateFrom || null, dateTo || null);
-  const metodos = useMetodosPagoStats();
+  const metodos = useMetodosPagoStats("", dateFrom || null, dateTo || null);
 
   if (stats.isLoading) return <p style={{ color: "#64748b", padding: "16px" }}>Cargando datos...</p>;
   if (stats.isError) return <p style={{ color: "#dc2626", padding: "16px" }}>Error al cargar los datos.</p>;
@@ -51,8 +55,8 @@ export function DashboardPage() {
 
       {/* KPIs de estado */}
       <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-        <KPICard title="Activos" value={stats.activos} subtitle={`${pct(stats.activos, stats.total)} del total · MRR ${fmt.format(stats.mrrActivo)}`} accentColor="#16a34a" />
-        <KPICard title="Suspendidos" value={stats.suspendidos} subtitle={`${pct(stats.suspendidos, stats.total)} del total · MRR en riesgo ${fmt.format(stats.mrrSuspendido)}`} accentColor="#d97706" />
+        <KPICard title="Activos" value={stats.activos} subtitle={`${pct(stats.activos, stats.total)} del total`} accentColor="#16a34a" />
+        <KPICard title="Suspendidos" value={stats.suspendidos} subtitle={`${pct(stats.suspendidos, stats.total)} del total`} accentColor="#d97706" />
         <KPICard title="Cancelados" value={stats.cancelados} subtitle={`${pct(stats.cancelados, stats.total)} del total`} accentColor="#dc2626" />
       </div>
 
@@ -75,8 +79,8 @@ export function DashboardPage() {
       </div>
 
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-        <PlanBarChart data={stats.planBreakdown} title="Clientes por Plan" />
-        <PlanBarChart data={stats.zonaBreakdown} title="Clientes por Zona" color="#0891b2" />
+        <PlanBarChart data={stats.planBreakdown} title="Clientes por Plan" onBarClick={(nombre) => onNavigateToClients({ plan: nombre })} />
+        <PlanBarChart data={stats.zonaBreakdown} title="Clientes por Zona" color="#0891b2" onBarClick={(nombre) => onNavigateToClients({ zona: nombre })} />
       </div>
 
       {/* Gráficas de métodos de pago */}

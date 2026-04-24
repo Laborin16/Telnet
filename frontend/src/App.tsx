@@ -8,26 +8,31 @@ import { DashboardPage } from "./modules/dashboard/pages/DashboardPage";
 import { FinanzasPage } from "./modules/finanzas/pages/FinanzasPage";
 import { AuditLogPage } from "./modules/auditlog/pages/AuditLogPage";
 import { LoginPage } from "./modules/auth/pages/LoginPage";
+import { UsuariosPage } from "./modules/auth/pages/UsuariosPage";
 import { useObservaciones } from "./modules/finanzas/hooks/useCobranza";
 import { useAuth } from "./modules/auth/hooks/useAuth";
 import apiClient from "./core/api/apiClient";
 
-type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria";
+type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "usuarios";
 const PAGE_SIZE = 25;
 
-const NAV_ITEMS: { key: Tab; label: string; icon: string }[] = [
+const NAV_ITEMS: { key: Tab; label: string; icon: string; adminOnly?: boolean }[] = [
   { key: "clientes",  label: "Clientes",  icon: "👥" },
   { key: "dashboard", label: "Dashboard", icon: "📊" },
   { key: "finanzas",  label: "Finanzas",  icon: "💰" },
   { key: "auditoria", label: "Auditoría", icon: "📋" },
+  { key: "usuarios",  label: "Usuarios",  icon: "🔑", adminOnly: true },
 ];
 
 export default function App() {
   const { user, isAuthenticated, login, logout } = useAuth();
 
-  // Muestra pantalla de login si no está autenticado
   if (!isAuthenticated) {
     return <LoginPage onLogin={login} />;
+  }
+
+  if (user!.debe_cambiar_password) {
+    return <ForzarCambioPassword onChanged={login} />;
   }
 
   return <MainApp user={user!} logout={logout} />;
@@ -41,6 +46,8 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<Set<string>>(new Set());
   const [alerta, setAlerta] = useState<Set<string>>(new Set());
+  const [planFiltro, setPlanFiltro] = useState("");
+  const [zonaFiltro, setZonaFiltro] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showChangePass, setShowChangePass] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
@@ -67,16 +74,34 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
 
   const ALERTA_ORDER: Record<string, number> = { critico: 0, pendiente: 1, suspendido: 2, normal: 3 };
 
+  const planesUnicos = useMemo(() => {
+    if (!allClients) return [];
+    const set = new Set<string>();
+    allClients.forEach(c => { if (c.plan_internet?.nombre) set.add(c.plan_internet.nombre); });
+    return Array.from(set).sort();
+  }, [allClients]);
+
+  const zonasUnicas = useMemo(() => {
+    if (!allClients) return [];
+    const set = new Set<string>();
+    allClients.forEach(c => { if (c.zona?.nombre) set.add(c.zona.nombre); });
+    return Array.from(set).sort();
+  }, [allClients]);
+
   const filtered = useMemo(() => {
     if (!allClients) return [];
+    const q = debouncedSearch.toLowerCase();
     return allClients
       .filter(c => {
         const matchStatus = status.size === 0 || status.has(c.estado);
         const matchAlerta = alerta.size === 0 || (c.alerta_corte !== null && alerta.has(c.alerta_corte));
-        const matchSearch = !debouncedSearch ||
-          c.nombre.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-          String(c.id_servicio).includes(debouncedSearch);
-        return matchStatus && matchAlerta && matchSearch;
+        const matchSearch = !q ||
+          c.nombre.toLowerCase().includes(q) ||
+          String(c.id_servicio).includes(q) ||
+          (c.telefono ?? "").replace(/\s|-/g, "").includes(q.replace(/\s|-/g, ""));
+        const matchPlan = !planFiltro || c.plan_internet?.nombre === planFiltro;
+        const matchZona = !zonaFiltro || c.zona?.nombre === zonaFiltro;
+        return matchStatus && matchAlerta && matchSearch && matchPlan && matchZona;
       })
       .sort((a, b) => {
         const oa = a.alerta_corte != null ? ALERTA_ORDER[a.alerta_corte] : 4;
@@ -84,7 +109,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
         if (oa !== ob) return oa - ob;
         return (a.dias_para_corte ?? 999) - (b.dias_para_corte ?? 999);
       });
-  }, [allClients, status, alerta, debouncedSearch]);
+  }, [allClients, status, alerta, debouncedSearch, planFiltro, zonaFiltro]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const start      = (page - 1) * PAGE_SIZE;
@@ -137,7 +162,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           <p style={{ margin: "0 0 8px 8px", fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em" }}>
             Módulos
           </p>
-          {NAV_ITEMS.map(({ key, label, icon }) => {
+          {NAV_ITEMS.filter(i => !i.adminOnly || user.es_admin).map(({ key, label, icon }) => {
             const active = tab === key;
             return (
               <button key={key} onClick={() => { setTab(key); if (isMobile) setSidebarOpen(false); }} style={{
@@ -237,7 +262,18 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
         {/* Scrollable content */}
         <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "14px 12px" : "24px 28px" }}>
 
-          {tab === "dashboard" && <DashboardPage />}
+          {tab === "usuarios"  && <UsuariosPage />}
+
+          {tab === "dashboard" && (
+            <DashboardPage
+              onNavigateToClients={({ plan, zona }) => {
+                setSearch(""); setStatus(new Set()); setAlerta(new Set()); setPage(1);
+                setPlanFiltro(plan ?? "");
+                setZonaFiltro(zona ?? "");
+                setTab("clientes");
+              }}
+            />
+          )}
           {tab === "finanzas"  && <FinanzasPage />}
           {tab === "auditoria" && <AuditLogPage />}
 
@@ -251,9 +287,9 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
               }}>
                 <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
                   <input
-                    type="text" placeholder="Buscar por nombre o ID..."
+                    type="text" placeholder="Buscar por nombre, ID o teléfono..."
                     value={search} onChange={e => handleSearch(e.target.value)}
-                    style={inputStyle}
+                    style={{ ...inputStyle, minWidth: "260px" }}
                   />
                   <MultiSelect
                     options={[
@@ -263,6 +299,22 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                     ]}
                     selected={status} onChange={handleStatus} placeholder="Todos los estados"
                   />
+                  <select
+                    value={planFiltro}
+                    onChange={e => { setPlanFiltro(e.target.value); setPage(1); }}
+                    style={{ ...inputStyle, minWidth: "180px", cursor: "pointer", color: planFiltro ? "#4338ca" : "#94a3b8", background: planFiltro ? "#eef2ff" : "#f8fafc", border: planFiltro ? "1px solid #6366f1" : "1px solid #e2e8f0" }}
+                  >
+                    <option value="">Todos los planes</option>
+                    {planesUnicos.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <select
+                    value={zonaFiltro}
+                    onChange={e => { setZonaFiltro(e.target.value); setPage(1); }}
+                    style={{ ...inputStyle, minWidth: "160px", cursor: "pointer", color: zonaFiltro ? "#0e7490" : "#94a3b8", background: zonaFiltro ? "#ecfeff" : "#f8fafc", border: zonaFiltro ? "1px solid #67e8f9" : "1px solid #e2e8f0" }}
+                  >
+                    <option value="">Todas las zonas</option>
+                    {zonasUnicas.map(z => <option key={z} value={z}>{z}</option>)}
+                  </select>
                 </div>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginRight: "2px" }}>Alerta:</span>
@@ -361,6 +413,109 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
       </div>
 
       {showChangePass && <ChangePasswordModal onClose={() => setShowChangePass(false)} />}
+    </div>
+  );
+}
+
+// ── Pantalla forzada de cambio de contraseña ─────────────────────────────────
+
+function ForzarCambioPassword({ onChanged }: { onChanged: (token: string) => void }) {
+  const [actual, setActual]       = useState("");
+  const [nuevo, setNuevo]         = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [error, setError]         = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [visible, setVisible]     = useState<Record<string, boolean>>({});
+
+  const toggleVisible = (key: string) => setVisible(v => ({ ...v, [key]: !v[key] }));
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (nuevo !== confirmar) { setError("Las contraseñas no coinciden."); return; }
+    if (nuevo.length < 6)    { setError("Mínimo 6 caracteres."); return; }
+    setError(""); setLoading(true);
+    try {
+      const { data } = await apiClient.post("/api/v1/auth/cambiar-password", {
+        password_actual: actual,
+        password_nuevo: nuevo,
+      });
+      onChanged(data.access_token);
+    } catch (err: unknown) {
+      setError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Error al cambiar contraseña.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+      padding: "20px",
+    }}>
+      <div style={{
+        background: "white", borderRadius: "16px", padding: "36px 40px",
+        width: "100%", maxWidth: "400px",
+        boxShadow: "0 25px 60px rgba(0,0,0,0.4)",
+      }}>
+        <div style={{ textAlign: "center", marginBottom: "24px" }}>
+          <div style={{ fontSize: "36px", marginBottom: "10px" }}>🔐</div>
+          <h2 style={{ margin: "0 0 6px", fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>
+            Cambia tu contraseña
+          </h2>
+          <p style={{ margin: 0, fontSize: "13px", color: "#64748b", lineHeight: 1.5 }}>
+            Tu cuenta tiene una contraseña temporal.<br />
+            Debes establecer una nueva para continuar.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          {[
+            { key: "actual",    label: "Contraseña temporal",  value: actual,    set: setActual },
+            { key: "nuevo",     label: "Nueva contraseña",     value: nuevo,     set: setNuevo },
+            { key: "confirmar", label: "Confirmar contraseña", value: confirmar, set: setConfirmar },
+          ].map(({ key, label, value, set }) => (
+            <div key={key} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {label}
+              </label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type={visible[key] ? "text" : "password"} value={value} onChange={e => set(e.target.value)} required
+                  style={{ width: "100%", boxSizing: "border-box", padding: "10px 40px 10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "14px", color: "#0f172a", outline: "none", background: "#f8fafc" }}
+                />
+                <button
+                  type="button" onClick={() => toggleVisible(key)}
+                  style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#94a3b8", padding: "2px" }}
+                >
+                  {visible[key] ? "Ocultar" : "Ver"}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {error && (
+            <div style={{ padding: "10px 12px", borderRadius: "8px", background: "#fef2f2", border: "1px solid #fecaca", fontSize: "13px", color: "#dc2626" }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit" disabled={loading}
+            style={{
+              marginTop: "4px", padding: "11px", borderRadius: "8px", border: "none",
+              background: loading ? "#cbd5e1" : "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+              color: "white", fontSize: "14px", fontWeight: 600,
+              cursor: loading ? "not-allowed" : "pointer",
+              boxShadow: loading ? "none" : "0 4px 12px rgba(59,130,246,0.3)",
+            }}
+          >
+            {loading ? "Guardando..." : "Establecer nueva contraseña"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

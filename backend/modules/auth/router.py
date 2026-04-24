@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
 from modules.auth.service import (
     login, cambiar_password, sync_usuarios_from_wisphub,
-    get_usuarios, decode_token,
+    get_usuarios, reset_password, decode_token,
 )
 import jwt
 
@@ -66,8 +66,8 @@ async def auth_cambiar_password(
         raise HTTPException(status_code=401, detail="Token inválido.")
 
     try:
-        await cambiar_password(user_id, body.password_actual, body.password_nuevo, db)
-        return {"ok": True, "mensaje": "Contraseña actualizada correctamente."}
+        new_token = await cambiar_password(user_id, body.password_actual, body.password_nuevo, db)
+        return {"ok": True, "mensaje": "Contraseña actualizada correctamente.", "access_token": new_token}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -87,3 +87,23 @@ async def auth_sync_usuarios(db: AsyncSession = Depends(get_db)):
 @router.get("/usuarios")
 async def auth_usuarios(db: AsyncSession = Depends(get_db)):
     return await get_usuarios(db)
+
+
+@router.post("/reset-password/{user_id}")
+async def auth_reset_password(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="No autenticado.")
+    try:
+        payload = decode_token(authorization[7:])
+        if not payload.get("es_admin"):
+            raise HTTPException(status_code=403, detail="Solo los administradores pueden resetear contraseñas.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido.")
+    try:
+        return await reset_password(user_id, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

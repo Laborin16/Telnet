@@ -92,6 +92,11 @@ export function useDashboardStats(dateFrom: string | null, dateTo: string | null
       if (inRange(c.fecha_cancelacion, dateFrom, dateTo)) cancelaciones++;
     }
 
+    const hasPeriod = dateFrom || dateTo;
+    const clientsForBreakdown = hasPeriod
+      ? clients.filter((c) => inRange(c.fecha_instalacion, dateFrom, dateTo))
+      : clients;
+
     return {
       isLoading,
       isError,
@@ -103,8 +108,8 @@ export function useDashboardStats(dateFrom: string | null, dateTo: string | null
       mrrSuspendido,
       riesgoCorte,
       alertaBreakdown,
-      planBreakdown: groupByName(clients, (c) => c.plan_internet),
-      zonaBreakdown: groupByName(clients, (c) => c.zona),
+      planBreakdown: groupByName(clientsForBreakdown, (c) => c.plan_internet),
+      zonaBreakdown: groupByName(clientsForBreakdown, (c) => c.zona),
       periodStats: {
         nuevasInstalaciones,
         cancelaciones,

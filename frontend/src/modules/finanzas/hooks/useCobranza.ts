@@ -39,19 +39,6 @@ export interface ResultadoCobranza {
   errores: number;
 }
 
-export function useEjecutarCobranza(fecha: string) {
-  const queryClient = useQueryClient();
-  return useMutation<ResultadoCobranza>({
-    mutationFn: async () => {
-      const res = await apiClient.post("/api/v1/finanzas/ejecutar-cobranza");
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["log-cobranza", fecha] });
-    },
-  });
-}
-
 // ── Pagos registrados manualmente ────────────────────────────────────────
 
 export interface PagoRegistrado {

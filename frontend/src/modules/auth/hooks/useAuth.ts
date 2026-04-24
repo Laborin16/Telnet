@@ -6,6 +6,7 @@ export interface AuthUser {
   username: string;
   nombre: string;
   es_admin: boolean;
+  debe_cambiar_password: boolean;
 }
 
 const TOKEN_KEY = "wisp_token";
@@ -19,6 +20,7 @@ function decodeToken(token: string): (AuthUser & { exp: number }) | null {
       username: payload.username ?? "",
       nombre: payload.nombre ?? "",
       es_admin: payload.es_admin ?? false,
+      debe_cambiar_password: payload.debe_cambiar_password ?? false,
       exp: payload.exp ?? 0,
     };
   } catch {

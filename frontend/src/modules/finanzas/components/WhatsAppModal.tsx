@@ -9,7 +9,10 @@ const COLOR_DIA: Record<number, string> = {
   1: "#d97706",
   2: "#ea580c",
   3: "#dc2626",
-  4: "#7c3aed",
+  4: "#dc2626",
+  5: "#dc2626",
+  6: "#dc2626",
+  7: "#7c3aed",
 };
 
 export function WhatsAppModal({ onClose }: Props) {
@@ -34,32 +37,54 @@ export function WhatsAppModal({ onClose }: Props) {
               Se enviarán mensajes a <strong>{resumen.total}</strong> clientes con facturas pendientes:
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }}>
               {resumen.resumen.filter(r => r.count > 0).map((r) => (
-                <div key={r.dia} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: "8px", backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <span style={{ fontSize: "13px", color: "#475569" }}>{r.label}</span>
-                  <span style={{ fontSize: "14px", fontWeight: 700, color: COLOR_DIA[r.dia] }}>
+                <div key={r.dia} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px", borderRadius: "8px", backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div>
+                    <span style={{ fontSize: "13px", color: "#475569" }}>{r.label}</span>
+                    {"plantilla" in r && (
+                      <span style={{ marginLeft: "8px", fontSize: "11px", color: "#94a3b8", fontFamily: "monospace" }}>
+                        {(r as { plantilla: string }).plantilla}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: "14px", fontWeight: 700, color: COLOR_DIA[r.dia] ?? "#64748b" }}>
                     {r.count} cliente{r.count !== 1 ? "s" : ""}
                   </span>
                 </div>
               ))}
             </div>
 
-            {resumen.resumen.find(r => r.dia >= 4 && r.count > 0) && (
-              resumen.suspension_habilitada ? (
-                <div style={{ padding: "10px 14px", backgroundColor: "#fef2f2", borderRadius: "8px", border: "1px solid #fca5a5", marginBottom: "16px" }}>
-                  <p style={{ fontSize: "12px", color: "#dc2626", fontWeight: 600, margin: 0 }}>
-                    ⚠ {resumen.resumen.filter(r => r.dia >= 4).reduce((s, r) => s + r.count, 0)} servicio(s) serán suspendidos automáticamente al confirmar.
-                  </p>
+            {(() => {
+              const suspendidos = resumen.resumen.filter(r => r.dia === 4).reduce((s, r) => s + r.count, 0);
+              const recoleccion = resumen.resumen.filter(r => r.dia === 7).reduce((s, r) => s + r.count, 0);
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px" }}>
+                  {suspendidos > 0 && (
+                    resumen.suspension_habilitada ? (
+                      <div style={{ padding: "10px 14px", backgroundColor: "#fef2f2", borderRadius: "8px", border: "1px solid #fca5a5" }}>
+                        <p style={{ fontSize: "12px", color: "#dc2626", fontWeight: 600, margin: 0 }}>
+                          ⚠ {suspendidos} servicio(s) serán suspendidos automáticamente.
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ padding: "10px 14px", backgroundColor: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                        <p style={{ fontSize: "12px", color: "#64748b", margin: 0 }}>
+                          ℹ {suspendidos} cliente(s) con servicio vencido. Suspensión automática desactivada.
+                        </p>
+                      </div>
+                    )
+                  )}
+                  {recoleccion > 0 && (
+                    <div style={{ padding: "10px 14px", backgroundColor: "#f5f3ff", borderRadius: "8px", border: "1px solid #c4b5fd" }}>
+                      <p style={{ fontSize: "12px", color: "#7c3aed", fontWeight: 600, margin: 0 }}>
+                        📦 {recoleccion} cliente(s) recibirán aviso de recolección de equipo (7+ días).
+                      </p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div style={{ padding: "10px 14px", backgroundColor: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0", marginBottom: "16px" }}>
-                  <p style={{ fontSize: "12px", color: "#64748b", margin: 0 }}>
-                    ℹ {resumen.resumen.filter(r => r.dia >= 4).reduce((s, r) => s + r.count, 0)} cliente(s) con 4+ días vencidos. La suspensión automática está desactivada.
-                  </p>
-                </div>
-              )
-            )}
+              );
+            })()}
 
             <div style={{ display: "flex", gap: "10px" }}>
               <button onClick={onClose} style={cancelBtn}>Cancelar</button>

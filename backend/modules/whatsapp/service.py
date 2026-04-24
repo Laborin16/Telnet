@@ -14,17 +14,20 @@ HEADERS = {
 SUSPENSION_HABILITADA = True
 
 TEMPLATES = {
-    0: "telnet_vencimiento_hoy_",
-    1: "telnet_pago_vencido",
-    2: "telnet_pago_vencido",
-    3: "telnet_advertencia_corte",
-    4: "telnet_servicio_suspendido",
+    0: "telnet_recordatorio_pago",   # Vence hoy
+    1: "telnet_aviso_vencido",       # 1 día vencido
+    2: "telnet_aviso_vencido",       # 2 días vencido
+    3: "telnet_aviso_vencido",       # 3 días vencido
+    4: "telnet_servicio_cortado",    # Servicio cortado (día 4)
+    5: "telnet_servicio_cortado",    # Servicio cortado (día 5-6)
+    6: "telnet_servicio_cortado",    # Servicio cortado (día 5-6)
+    7: "telnet_recoleccion_equipo",  # Recolección de equipo (día 7+)
 }
 IDIOMA_POR_PLANTILLA = {
-    "telnet_vencimiento_hoy_": "es_MX",
-    "telnet_pago_vencido": "es_MX",
-    "telnet_advertencia_corte": "es_MX",
-    "telnet_servicio_suspendido": "es_MX",
+    "telnet_recordatorio_pago": "es_MX",
+    "telnet_aviso_vencido": "es_MX",
+    "telnet_servicio_cortado": "es_MX",
+    "telnet_recoleccion_equipo": "es_MX",
 }
 
 
@@ -109,11 +112,8 @@ async def ejecutar_recordatorios(facturas: list[dict]) -> dict:
             return
 
         dias = (today - fecha_ref).days
-        if dias < 0:
-            return
-
-        # Normalizar: días 4+ usan la plantilla de suspendido
-        dias_template = dias if dias in TEMPLATES else 4 if dias > 4 else None
+        # Días 0-7 exactos están en TEMPLATES; 8+ colapsan al día 7 (recolección)
+        dias_template = dias if dias in TEMPLATES else 7 if dias > 7 else None
         if dias_template is None:
             return
 

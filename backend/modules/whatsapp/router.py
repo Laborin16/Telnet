@@ -1,10 +1,11 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
 from core.dependencies import get_usuario
 from core.wisphub.client import wisphub_client
-from modules.whatsapp.service import ejecutar_recordatorios, send_template_message, _parse_fecha_referencia, SUSPENSION_HABILITADA, TEMPLATES
+from modules.whatsapp.service import ejecutar_recordatorios, send_template_message, SUSPENSION_HABILITADA, TEMPLATES
 from modules.auditlog.service import log_accion
 
 router = APIRouter()
@@ -36,7 +37,7 @@ async def enviar_individual(
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
-    dias_key = body.dias_vencido if body.dias_vencido in TEMPLATES else (4 if body.dias_vencido > 4 else None)
+    dias_key = body.dias_vencido if body.dias_vencido in TEMPLATES else 7 if body.dias_vencido > 7 else None
     if dias_key is None:
         raise HTTPException(status_code=400, detail="No hay plantilla para este número de días.")
 
@@ -83,36 +84,83 @@ def _enrich_factura(f: dict, clientes_map: dict[int, dict]) -> None:
             break
 
 
+_FECHA_PAGO_FMTS = (
+    "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y",
+    "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d",
+)
+
+
+def _fecha_pago_date(f: dict):
+    """Devuelve fecha_pago parseada; cae a fecha_vencimiento si no existe."""
+    from datetime import date as _date
+    fp_raw = (f.get("fecha_pago") or "").strip()
+    if fp_raw:
+        for fmt in _FECHA_PAGO_FMTS:
+            try:
+                from datetime import datetime
+                return datetime.strptime(fp_raw[:19], fmt).date()
+            except ValueError:
+                continue
+    fv_str = (f.get("fecha_vencimiento") or "")[:10]
+    if fv_str:
+        try:
+            return _date.fromisoformat(fv_str)
+        except ValueError:
+            pass
+    return None
+
+
 @router.get("/resumen")
 async def resumen_recordatorios():
     from datetime import date
     today = date.today()
 
-    facturas_data = await wisphub_client.get("/api/facturas/", params={"page_size": 1000})
-    clientes_data = await wisphub_client.get("/api/clientes/", params={"page_size": 1000})
+    facturas_data, clientes_data = await asyncio.gather(
+        wisphub_client.get("/api/facturas/", params={"page_size": 1000}),
+        wisphub_client.get("/api/clientes/", params={"page_size": 1000}),
+    )
     clientes_map = _build_clientes_map(clientes_data)
 
-    conteos = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    # Agrupar por servicio — igual que cobranza: una entrada por cliente,
+    # la factura más urgente (menor fecha_pago).
+    srv_dias: dict[int, int] = {}
     for f in facturas_data.get("results", []):
         if f.get("estado") != "Pendiente de Pago":
             continue
         _enrich_factura(f, clientes_map)
-        fecha_ref = _parse_fecha_referencia(f)
+        cliente = f.get("cliente") or {}
+        srv_id = cliente.get("id_servicio")
+        if not srv_id:
+            continue
+        fecha_ref = _fecha_pago_date(f)
         if fecha_ref is None:
             continue
         dias = (today - fecha_ref).days
-        if dias in conteos:
+        if dias < 0:
+            continue
+        # Conservar el más urgente (más días vencido) por servicio
+        if srv_id not in srv_dias or dias > srv_dias[srv_id]:
+            srv_dias[srv_id] = dias
+
+    conteos = {0: 0, 1: 0, 2: 0, 3: 0, "cortado": 0, 7: 0}
+    for dias in srv_dias.values():
+        if dias <= 3:
             conteos[dias] += 1
+        elif dias <= 6:
+            conteos["cortado"] += 1
+        else:
+            conteos[7] += 1
 
     return {
         "fecha": today.isoformat(),
         "suspension_habilitada": SUSPENSION_HABILITADA,
         "resumen": [
-            {"dia": 0, "label": "Vencen hoy", "count": conteos[0]},
-            {"dia": 1, "label": "1 día vencido", "count": conteos[1]},
-            {"dia": 2, "label": "2 días vencido", "count": conteos[2]},
-            {"dia": 3, "label": "3 días vencido", "count": conteos[3]},
-            {"dia": 4, "label": "4 días vencido", "count": conteos[4]},
+            {"dia": 0, "label": "Vencen hoy",           "plantilla": "telnet_recordatorio_pago",  "count": conteos[0]},
+            {"dia": 1, "label": "1 día vencido",         "plantilla": "telnet_aviso_vencido",      "count": conteos[1]},
+            {"dia": 2, "label": "2 días vencido",        "plantilla": "telnet_aviso_vencido",      "count": conteos[2]},
+            {"dia": 3, "label": "3 días vencido",        "plantilla": "telnet_aviso_vencido",      "count": conteos[3]},
+            {"dia": 4, "label": "Servicio cortado",      "plantilla": "telnet_servicio_cortado",   "count": conteos["cortado"]},
+            {"dia": 7, "label": "Recolección de equipo", "plantilla": "telnet_recoleccion_equipo", "count": conteos[7]},
         ],
         "total": sum(conteos.values()),
     }

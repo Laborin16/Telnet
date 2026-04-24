@@ -1,16 +1,19 @@
 import os
 from fastapi import APIRouter, Query, Depends, Body, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from typing import Optional
+from io import BytesIO
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
 from core.dependencies import get_usuario
 from modules.auditlog.service import log_accion
 from modules.finanzas.service import (
     get_cobros_semana, get_cobros_dia, toggle_verificacion,
-    ejecutar_flujo_cobranza, get_log_cobranza, registrar_pago, get_pagos_dia,
+    get_log_cobranza, registrar_pago, get_pagos_dia,
     get_alertas_cobranza, pagar_factura_wisphub, get_recoleccion,
     guardar_estado_equipo, get_historial_pagos, upload_comprobante, get_tecnicos,
     get_formas_pago, get_observaciones_batch, upsert_observacion,
+    get_reporte_semanal_data, generar_excel_reporte, generar_pdf_reporte,
 )
 
 router = APIRouter()
@@ -68,6 +71,47 @@ async def recoleccion(db: AsyncSession = Depends(get_db)):
     return await get_recoleccion(db)
 
 
+@router.get("/reporte-semanal")
+async def reporte_semanal_json(
+    fecha_inicio: str = Query(...),
+    fecha_fin: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_reporte_semanal_data(fecha_inicio, fecha_fin, db)
+
+
+@router.get("/reporte-semanal/excel")
+async def reporte_semanal_excel(
+    fecha_inicio: str = Query(...),
+    fecha_fin: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await get_reporte_semanal_data(fecha_inicio, fecha_fin, db)
+    xlsx_bytes = generar_excel_reporte(data)
+    filename = f"reporte_{fecha_inicio}_{fecha_fin}.xlsx"
+    return StreamingResponse(
+        BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/reporte-semanal/pdf")
+async def reporte_semanal_pdf(
+    fecha_inicio: str = Query(...),
+    fecha_fin: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await get_reporte_semanal_data(fecha_inicio, fecha_fin, db)
+    pdf_bytes = generar_pdf_reporte(data)
+    filename = f"reporte_{fecha_inicio}_{fecha_fin}.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/historial")
 async def historial_pagos(search: Optional[str] = Query(None), db: AsyncSession = Depends(get_db)):
     return await get_historial_pagos(db, search)
@@ -96,26 +140,6 @@ async def verificar_pago(
     return result
 
 
-@router.post("/ejecutar-cobranza")
-async def ejecutar_cobranza(
-    db: AsyncSession = Depends(get_db),
-    usuario: dict = Depends(get_usuario),
-):
-    result = await ejecutar_flujo_cobranza(db)
-    await log_accion(
-        db, usuario,
-        accion="EJECUTAR",
-        modulo="cobranza",
-        entidad="flujo_cobranza",
-        descripcion=(
-            f"Flujo de cobranza ejecutado — "
-            f"{result.get('recordatorios_enviados', 0)} recordatorios, "
-            f"{result.get('cortes_ejecutados', 0)} cortes, "
-            f"{result.get('errores', 0)} errores"
-        ),
-        datos_extra=result,
-    )
-    return result
 
 
 @router.post("/pagos")
