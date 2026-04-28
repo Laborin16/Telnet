@@ -23,14 +23,12 @@ def _week_range(fecha_inicio: str | None = None) -> tuple[date, date]:
     end = start + timedelta(days=6)  # Sunday
     return start, end
 
-
 def _tipo_cobro(articulos: list) -> str:
     for art in articulos:
         desc = (art.get("descripcion") or "").lower()
         if "instalaci" in desc:
             return "instalacion"
     return "mensualidad"
-
 
 async def get_cobros_semana(fecha_inicio: str | None = None) -> dict:
     start, end = _week_range(fecha_inicio)
@@ -91,13 +89,10 @@ async def get_cobros_semana(fecha_inicio: str | None = None) -> dict:
         "items": items,
     }
 
-
 _ID_A_METODO: dict[int, str] = {
     82219: "efectivo",
     84091: "tarjeta",
-    82222: "transferencia bancaria",
-}
-
+    82222: "transferencia bancaria",}
 
 def _metodo_pago(f: dict) -> str:
     raw = f.get("metodo_pago") or f.get("forma_pago") or ""
@@ -110,7 +105,6 @@ def _metodo_pago(f: dict) -> str:
         return (raw.get("Nombre") or raw.get("nombre") or "no_especificado").strip().lower()
     value = str(raw).strip().lower()
     return value if value else "no_especificado"
-
 
 async def get_cobros_dia(fecha: str | None = None, fecha_fin: str | None = None, db: AsyncSession | None = None) -> dict:
     fecha_str = fecha or date.today().isoformat()
@@ -211,9 +205,6 @@ async def toggle_verificacion(id_factura: int, notas: str | None, db: AsyncSessi
         "notas": registro.notas,
     }
 
-
-
-
 async def get_alertas_cobranza() -> dict:
     today = date.today()
 
@@ -312,7 +303,6 @@ async def get_alertas_cobranza() -> dict:
         "mas_de_3":  {"count": len(grupos["mas_de_3"]), "items": grupos["mas_de_3"]},
     }
 
-
 async def get_log_cobranza(fecha: str | None, db: AsyncSession) -> dict:
     fecha_str = fecha or date.today().isoformat()
     inicio = datetime.combine(date.fromisoformat(fecha_str), datetime.min.time())
@@ -339,7 +329,6 @@ async def get_log_cobranza(fecha: str | None, db: AsyncSession) -> dict:
             for r in logs
         ],
     }
-
 
 async def registrar_pago(data: dict, db: AsyncSession) -> dict:
     pago = PagoRegistrado(
@@ -396,9 +385,7 @@ async def get_pagos_dia(fecha: str | None, db: AsyncSession) -> dict:
 _FORMAS_PAGO_NOMBRES: dict[int, str] = {
     82219: "Efectivo",
     84091: "Tarjeta",
-    82222: "Transferencia Bancaria",
-}
-
+    82222: "Transferencia Bancaria",}
 
 async def pagar_factura_wisphub(id_factura: int, data: dict, db: AsyncSession | None = None) -> dict:
     fecha_pago = data.get("fecha_pago") or datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -713,64 +700,13 @@ async def get_reporte_semanal_data(fecha_inicio: str, fecha_fin: str, db: AsyncS
         if fecha_inicio <= (f.get("fecha_emision") or "")[:10] <= fecha_fin
     ]
 
-    # Ingresos por día (sólo pagadas) — fuente: WispHub
-    por_dia: dict[str, dict] = {}
-
-    for f in rango:
-        emision = (f.get("fecha_emision") or "")[:10]
-        if not emision:
-            continue
-        monto = float(f.get("total") or 0)
-        pagada = f.get("estado") == "Pagada"
-
-        if emision not in por_dia:
-            por_dia[emision] = {"fecha": emision, "total_pagado": 0.0, "total_pendiente": 0.0,
-                                "count_pagadas": 0, "count_pendientes": 0}
-        if pagada:
-            por_dia[emision]["total_pagado"] += monto
-            por_dia[emision]["count_pagadas"] += 1
-        else:
-            por_dia[emision]["total_pendiente"] += monto
-            por_dia[emision]["count_pendientes"] += 1
-
-    # ── Por método de pago con desglose por cuenta ─────────────────────────
-    # Fuente primaria: WispHub facturas Pagadas del rango (forma_pago → id=método, nombre=cuenta)
-    # Fuente secundaria: PagoRegistrado local (para pagos registrados directamente en SIT)
-    _metodo_cuenta: dict[str, dict[str, dict]] = {}
-
-    def _add_metodo_cuenta(metodo: str, cuenta: str, monto: float) -> None:
-        if metodo not in _metodo_cuenta:
-            _metodo_cuenta[metodo] = {}
-        if cuenta not in _metodo_cuenta[metodo]:
-            _metodo_cuenta[metodo][cuenta] = {"total": 0.0, "count": 0}
-        _metodo_cuenta[metodo][cuenta]["total"] += monto
-        _metodo_cuenta[metodo][cuenta]["count"] += 1
-
-    # 1) Pagos desde WispHub (facturas Pagadas en el rango)
-    wisphub_factura_ids: set[int] = set()
-    for f in rango:
-        if f.get("estado") != "Pagada":
-            continue
-        fid = f.get("id_factura")
-        if fid:
-            wisphub_factura_ids.add(fid)
-        monto = float(f.get("total") or 0)
-        fp = f.get("forma_pago") or f.get("metodo_pago") or {}
-        if isinstance(fp, dict):
-            tipo_id = fp.get("id") or fp.get("Id")
-            nombre_cuenta = (fp.get("nombre") or fp.get("Nombre") or "Sin especificar").strip()
-            metodo_label = _FORMAS_PAGO_NOMBRES.get(int(tipo_id), "Otro") if tipo_id else "Otro"
-        else:
-            metodo_label = _METODO_LABELS.get(str(fp).strip().lower(), str(fp).strip() or "Otro")
-            nombre_cuenta = "Sin especificar"
-        _add_metodo_cuenta(metodo_label, nombre_cuenta, monto)
-
-    # 2) Pagos locales (PagoRegistrado) NO cubiertos por WispHub en el mismo rango
+    # ── Preparar fechas y pre-cargar PagoRegistrado del rango ─────────────
     from sqlalchemy import or_, and_, func
     date_inicio = date.fromisoformat(fecha_inicio)
     date_fin    = date.fromisoformat(fecha_fin)
-    inicio_dt = datetime.combine(date_inicio, datetime.min.time())
-    fin_dt    = datetime.combine(date_fin,    datetime.max.time())
+    inicio_dt   = datetime.combine(date_inicio, datetime.min.time())
+    fin_dt      = datetime.combine(date_fin,    datetime.max.time())
+
     res_pagos = await db.execute(
         select(PagoRegistrado).where(
             or_(
@@ -785,16 +721,86 @@ async def get_reporte_semanal_data(fecha_inicio: str, fecha_fin: str, db: AsyncS
             )
         )
     )
-    for p in res_pagos.scalars().all():
-        # Evitar duplicar si ya fue contado desde WispHub
-        if p.id_factura and p.id_factura in wisphub_factura_ids:
+    pagos_locales = res_pagos.scalars().all()
+    # Facturas gestionadas localmente: WispHub las excluye de por_dia para que la
+    # fecha de registro (fecha_pago) mande, no la fecha de emisión de WispHub.
+    pago_local_factura_ids: set[int] = {p.id_factura for p in pagos_locales if p.id_factura}
+
+    # ── Ingresos por día — fuente primaria: WispHub ────────────────────────
+    por_dia: dict[str, dict] = {}
+
+    for f in rango:
+        emision = (f.get("fecha_emision") or "")[:10]
+        if not emision:
             continue
+        fid = f.get("id_factura")
+        # Si la factura tiene un PagoRegistrado, la fecha correcta vendrá de allí
+        if fid and fid in pago_local_factura_ids:
+            continue
+        monto = float(f.get("total") or 0)
+        pagada = f.get("estado") == "Pagada"
+        if emision not in por_dia:
+            por_dia[emision] = {"fecha": emision, "total_pagado": 0.0, "total_pendiente": 0.0,
+                                "count_pagadas": 0, "count_pendientes": 0}
+        if pagada:
+            por_dia[emision]["total_pagado"] += monto
+            por_dia[emision]["count_pagadas"] += 1
+        else:
+            por_dia[emision]["total_pendiente"] += monto
+            por_dia[emision]["count_pendientes"] += 1
+
+    # ── Por método de pago con desglose por cuenta ─────────────────────────
+    _metodo_cuenta: dict[str, dict[str, dict]] = {}
+
+    def _add_metodo_cuenta(metodo: str, cuenta: str, monto: float) -> None:
+        if metodo not in _metodo_cuenta:
+            _metodo_cuenta[metodo] = {}
+        if cuenta not in _metodo_cuenta[metodo]:
+            _metodo_cuenta[metodo][cuenta] = {"total": 0.0, "count": 0}
+        _metodo_cuenta[metodo][cuenta]["total"] += monto
+        _metodo_cuenta[metodo][cuenta]["count"] += 1
+
+    # 1) WispHub: facturas Pagadas que NO tienen PagoRegistrado local
+    wisphub_factura_ids: set[int] = set()
+    for f in rango:
+        if f.get("estado") != "Pagada":
+            continue
+        fid = f.get("id_factura")
+        if fid:
+            wisphub_factura_ids.add(fid)
+        if fid and fid in pago_local_factura_ids:
+            continue  # método de pago lo registra PagoRegistrado
+        monto = float(f.get("total") or 0)
+        fp = f.get("forma_pago") or f.get("metodo_pago") or {}
+        if isinstance(fp, dict):
+            tipo_id = fp.get("id") or fp.get("Id")
+            nombre_cuenta = (fp.get("nombre") or fp.get("Nombre") or "Sin especificar").strip()
+            metodo_label = _FORMAS_PAGO_NOMBRES.get(int(tipo_id), "Otro") if tipo_id else "Otro"
+        else:
+            metodo_label = _METODO_LABELS.get(str(fp).strip().lower(), str(fp).strip() or "Otro")
+            nombre_cuenta = "Sin especificar"
+        _add_metodo_cuenta(metodo_label, nombre_cuenta, monto)
+
+    # 2) PagoRegistrado local: siempre actualiza por_dia con la fecha de registro
+    for p in pagos_locales:
+        monto_p = float(p.monto)
         raw_m = (p.metodo_pago or "Otro").strip()
         if " - " in raw_m:
             metodo, cuenta = raw_m.split(" - ", 1)
         else:
             metodo, cuenta = raw_m, "Sin especificar"
-        _add_metodo_cuenta(metodo, cuenta, float(p.monto))
+        _add_metodo_cuenta(metodo, cuenta, monto_p)
+
+        # Pagos recibidos: usar fecha_pago_real ("Fecha de pago" en UI),
+        # o fecha_pago (timestamp de registro) si no se ingresó fecha_pago_real.
+        fecha_cobro = (p.fecha_pago_real or p.fecha_pago).date()
+        if date_inicio <= fecha_cobro <= date_fin:
+            fcobro = fecha_cobro.isoformat()
+            if fcobro not in por_dia:
+                por_dia[fcobro] = {"fecha": fcobro, "total_pagado": 0.0, "total_pendiente": 0.0,
+                                   "count_pagadas": 0, "count_pendientes": 0}
+            por_dia[fcobro]["total_pagado"] += monto_p
+            por_dia[fcobro]["count_pagadas"] += 1
 
     por_metodo = []
     for metodo, cuentas in _metodo_cuenta.items():
@@ -919,149 +925,188 @@ def _excel_col_headers(ws, row: int, headers: list[str]) -> None:
 def generar_excel_reporte(data: dict) -> bytes:
     from io import BytesIO
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, numbers
+    from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
-
-    wb = openpyxl.Workbook()
-
-    # ── Hoja 1: Ingresos por Día ───────────────────────────────────────────
-    ws1 = wb.active
-    ws1.title = "Ingresos por Día"
-
-    _excel_header_style(ws1, 1, 5,
-        f"SIT — Reporte de Ingresos  ·  {data['fecha_inicio']} al {data['fecha_fin']}")
-    ws1.append([])
-    _excel_col_headers(ws1, 3, ["Fecha", "Facturas cobradas", "Total cobrado", "Facturas pendientes", "Total pendiente"])
+    from openpyxl.chart import BarChart, DoughnutChart, PieChart, Reference
+    from openpyxl.chart.series import DataPoint
 
     MXN = '#,##0.00'
+    GREEN_PALETTE = ["15803D", "22C55E", "4ADE80", "86EFAC", "166534", "BBF7D0"]
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Reporte Semanal"
+
+    for col, w in enumerate([30, 16, 18, 22, 18], start=1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+    for letter in list("GHIJKLMNOP"):
+        ws.column_dimensions[letter].width = 12
+
+    def sec(title: str, color: str, ncols: int = 5) -> int:
+        r = ws.max_row + 1
+        ws.append([title] + [""] * (ncols - 1))
+        ws.merge_cells(f"A{r}:{get_column_letter(ncols)}{r}")
+        cell = ws.cell(row=r, column=1)
+        cell.font = Font(bold=True, size=11, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor=color)
+        cell.alignment = Alignment(horizontal="left")
+        return r
+
+    def bold_total(row: int, ncols: int, fgColor: str):
+        for col in range(1, ncols + 1):
+            c = ws.cell(row=row, column=col)
+            c.font = Font(bold=True)
+            c.fill = PatternFill("solid", fgColor=fgColor)
+
+    def color_points(series, color_list: list):
+        for idx, hex_color in enumerate(color_list):
+            pt = DataPoint(idx=idx)
+            pt.spPr.solidFill = hex_color
+            series.dPt.append(pt)
+
+    # ── Encabezado ──────────────────────────────────────────────────────────
+    _excel_header_style(ws, 1, 5,
+        f"SIT — Reporte Semanal  ·  {data['fecha_inicio']} al {data['fecha_fin']}")
+    ws.append([])
+
+    # ── Ingresos por Día ─────────────────────────────────────────────────────
+    sec_dia_start = sec("Ingresos por Día", "1E3A8A")
+    _excel_col_headers(ws, ws.max_row + 1,
+        ["Fecha", "Fact. cobradas", "Total cobrado", "Fact. pendientes", "Total pendiente"])
+    sec_dia_data_start = ws.max_row + 1
     for dia in data["por_dia"]:
-        ws1.append([
-            dia["fecha"],
-            dia["count_pagadas"],
-            dia["total_pagado"],
-            dia["count_pendientes"],
-            dia["total_pendiente"],
-        ])
+        ws.append([dia["fecha"], dia["count_pagadas"], dia["total_pagado"],
+                   dia["count_pendientes"], dia["total_pendiente"]])
         for col in (3, 5):
-            ws1.cell(row=ws1.max_row, column=col).number_format = MXN
-
-    ws1.append([])
-    total_row = ws1.max_row + 1
-    ws1.append(["TOTAL",
-                data["total_facturas_pagadas"],
-                data["total_ingresado"],
-                "",
-                data["total_pendiente"]])
+            ws.cell(row=ws.max_row, column=col).number_format = MXN
+    sec_dia_data_end = ws.max_row
+    tr = ws.max_row + 1
+    ws.append(["TOTAL", data["total_facturas_pagadas"], data["total_ingresado"],
+               "", data["total_pendiente"]])
     for col in (3, 5):
-        ws1.cell(row=total_row, column=col).number_format = MXN
-    for col in range(1, 6):
-        c = ws1.cell(row=total_row, column=col)
-        c.font = Font(bold=True)
-        c.fill = PatternFill("solid", fgColor="DBEAFE")
+        ws.cell(row=tr, column=col).number_format = MXN
+    bold_total(tr, 5, "DBEAFE")
+    ws.append([])
 
-    for col, w in enumerate([14, 20, 18, 22, 18], start=1):
-        ws1.column_dimensions[get_column_letter(col)].width = w
+    # ── Por Método / Cuenta ──────────────────────────────────────────────────
+    total_count = sum(m["count"] for m in data["por_metodo"])
+    total_monto = round(sum(m["total"] for m in data["por_metodo"]), 2)
 
-    # ── Hoja 2: Por Método de Pago ─────────────────────────────────────────
-    total_local_count = sum(m["count"] for m in data["por_metodo"])
-    total_local_monto = round(sum(m["total"] for m in data["por_metodo"]), 2)
-
-    ws2 = wb.create_sheet("Por Método de Pago")
-    _excel_header_style(ws2, 1, 3, "Ingresos por Método de Pago", "15803D")
-    ws2.append([])
-    _excel_col_headers(ws2, 3, ["Método de Pago", "Pagos", "Total cobrado"])
+    sec_met_start = sec("Por Método de Pago", "15803D")
+    _excel_col_headers(ws, ws.max_row + 1, ["Método de Pago", "Pagos", "Total cobrado"])
+    sec_met_data_start = ws.max_row + 1
     for m in data["por_metodo"]:
-        ws2.append([m["metodo"], m["count"], m["total"]])
-        ws2.cell(row=ws2.max_row, column=3).number_format = MXN
-    tr2a = ws2.max_row + 1
-    ws2.append(["TOTAL", total_local_count, total_local_monto])
-    ws2.cell(row=tr2a, column=3).number_format = MXN
-    for col in range(1, 4):
-        c2 = ws2.cell(row=tr2a, column=col)
-        c2.font = Font(bold=True)
-        c2.fill = PatternFill("solid", fgColor="DCFCE7")
-    for col, w in enumerate([26, 10, 18], start=1):
-        ws2.column_dimensions[get_column_letter(col)].width = w
+        ws.append([m["metodo"], m["count"], m["total"]])
+        ws.cell(row=ws.max_row, column=3).number_format = MXN
+    sec_met_data_end = ws.max_row
+    tr = ws.max_row + 1
+    ws.append(["TOTAL", total_count, total_monto])
+    ws.cell(row=tr, column=3).number_format = MXN
+    bold_total(tr, 3, "DCFCE7")
+    ws.append([])
 
-    # ── Hoja 3: Desglose por Cuenta ───────────────────────────────────────
-    ws2b = wb.create_sheet("Desglose por Cuenta")
-    _excel_header_style(ws2b, 1, 4, "Desglose por Cuenta", "15803D")
-    ws2b.append([])
-    _excel_col_headers(ws2b, 3, ["Método de Pago", "Cuenta", "Pagos", "Total cobrado"])
-    for m in data["por_metodo"]:
-        cuentas = m["cuentas"]
-        first = True
-        for c in cuentas:
-            ws2b.append([m["metodo"] if first else "", c["cuenta"], c["count"], c["total"]])
-            ws2b.cell(row=ws2b.max_row, column=4).number_format = MXN
-            if first:
-                first = False
-        if len(cuentas) > 1:
-            ws2b.append(["", f"Subtotal {m['metodo']}", m["count"], m["total"]])
-            ws2b.cell(row=ws2b.max_row, column=4).number_format = MXN
-            for col in range(1, 5):
-                ws2b.cell(row=ws2b.max_row, column=col).font = Font(bold=True, italic=True)
-                ws2b.cell(row=ws2b.max_row, column=col).fill = PatternFill("solid", fgColor="ECFDF5")
-        ws2b.append([])
-    tr2b = ws2b.max_row + 1
-    ws2b.append(["TOTAL", "", total_local_count, total_local_monto])
-    ws2b.cell(row=tr2b, column=4).number_format = MXN
-    for col in range(1, 5):
-        c2 = ws2b.cell(row=tr2b, column=col)
-        c2.font = Font(bold=True)
-        c2.fill = PatternFill("solid", fgColor="DCFCE7")
-    for col, w in enumerate([26, 22, 10, 18], start=1):
-        ws2b.column_dimensions[get_column_letter(col)].width = w
+    sec_cta_start = sec("Desglose por Cuenta", "15803D")
+    _excel_col_headers(ws, ws.max_row + 1, ["Cuenta", "Pagos", "Total cobrado"])
+    sec_cta_data_start = ws.max_row + 1
+    for c in sorted([c for m in data["por_metodo"] for c in m["cuentas"]],
+                    key=lambda x: -x["total"]):
+        ws.append([c["cuenta"], c["count"], c["total"]])
+        ws.cell(row=ws.max_row, column=3).number_format = MXN
+    sec_cta_data_end = ws.max_row
+    tr = ws.max_row + 1
+    ws.append(["TOTAL", total_count, total_monto])
+    ws.cell(row=tr, column=3).number_format = MXN
+    bold_total(tr, 3, "DCFCE7")
+    ws.append([])
 
-    # ── Hoja 4: Resumen de Clientes ────────────────────────────────────────
-    ws3 = wb.create_sheet("Resumen Clientes")
-    _excel_header_style(ws3, 1, 3, "Resumen de Clientes", "7C3AED")
-    ws3.append([])  # fila 2
+    # ── Resumen de Clientes ──────────────────────────────────────────────────
+    sec_cli_start = sec("Resumen de Clientes", "7C3AED")
     rc = data["resumen_clientes"]
+    _excel_col_headers(ws, ws.max_row + 1, ["Indicador", "Clientes", "% del total"])
+    sec_cli_data_start = ws.max_row + 1
 
-    # — Sección A: Estado del servicio (mutuamente excluyentes) —
-    _excel_col_headers(ws3, 3, ["Estado del Servicio", "Clientes", "% del total"])
-    estado_rows = [
+    for label, qty, pct_val, fill in [
         ("Activos",     rc["activos"],     rc["pct_activos"],     "F0FDF4"),
         ("Suspendidos", rc["suspendidos"], rc["pct_suspendidos"], "FFF7ED"),
         ("Cancelados",  rc["cancelados"],  rc["pct_cancelados"],  "FEF2F2"),
-    ]
-    for label, qty, pct_val, fill in estado_rows:
-        ws3.append([label, qty, f"{pct_val}%"])
+    ]:
+        ws.append([label, qty, f"{pct_val}%"])
         for col in range(1, 4):
-            ws3.cell(row=ws3.max_row, column=col).fill = PatternFill("solid", fgColor=fill)
+            ws.cell(row=ws.max_row, column=col).fill = PatternFill("solid", fgColor=fill)
 
     total_estado = rc["activos"] + rc["suspendidos"] + rc["cancelados"]
     pct_estado = round(total_estado / rc["total_real"] * 100, 1) if rc["total_real"] else 0
-    ws3.append(["TOTAL", total_estado, f"{pct_estado}%"])
-    for col in range(1, 4):
-        c = ws3.cell(row=ws3.max_row, column=col)
-        c.font = Font(bold=True)
-        c.fill = PatternFill("solid", fgColor="EDE9FE")
+    tr = ws.max_row + 1
+    ws.append(["TOTAL", total_estado, f"{pct_estado}%"])
+    bold_total(tr, 3, "EDE9FE")
+    ws.append([])
 
-    # — Separador —
-    ws3.append([])
-    sep_row = ws3.max_row + 1
-    ws3.append(["INDICADORES DE CARTERA", "", ""])
-    ws3.merge_cells(f"A{sep_row}:C{sep_row}")
-    sep_cell = ws3.cell(row=sep_row, column=1)
-    sep_cell.font = Font(bold=True, size=10, color="92400E")
-    sep_cell.fill = PatternFill("solid", fgColor="FEF3C7")
-    sep_cell.alignment = Alignment(horizontal="center")
-
-    # — Sección B: Indicadores de cartera —
-    indicador_rows = [
+    for label, qty, pct_val, fill in [
         ("Activos con deuda",        rc["activos_con_deuda"],     rc["pct_activos_con_deuda"],     "FEF9C3"),
         ("Suspendidos con deuda",    rc["suspendidos_con_deuda"], rc["pct_suspendidos_con_deuda"], "FEF9C3"),
         ("En recolección (7+ días)", rc["en_recoleccion"],        rc["pct_en_recoleccion"],        "EDE9FE"),
-    ]
-    for label, qty, pct_val, fill in indicador_rows:
-        ws3.append([label, qty, f"{pct_val}%"])
+    ]:
+        ws.append([label, qty, f"{pct_val}%"])
         for col in range(1, 4):
-            ws3.cell(row=ws3.max_row, column=col).fill = PatternFill("solid", fgColor=fill)
+            ws.cell(row=ws.max_row, column=col).fill = PatternFill("solid", fgColor=fill)
 
-    for col, w in enumerate([32, 12, 14], start=1):
-        ws3.column_dimensions[get_column_letter(col)].width = w
+    # ── Gráficas ─────────────────────────────────────────────────────────────
+    # Chart 1: BarChart vertical — Ingresos por Día
+    c1 = BarChart()
+    c1.type = "col"
+    c1.title = "Ingresos por Día"
+    c1.y_axis.title = "MXN"
+    c1.width = 14
+    c1.height = 9
+    c1.add_data(Reference(ws, min_col=3, min_row=sec_dia_data_start - 1,
+                          max_row=sec_dia_data_end), titles_from_data=True)
+    c1.set_categories(Reference(ws, min_col=1, min_row=sec_dia_data_start,
+                                max_row=sec_dia_data_end))
+    n_dias = sec_dia_data_end - sec_dia_data_start + 1
+    color_points(c1.series[0], ["1E3A8A"] * n_dias)
+    ws.add_chart(c1, f"G{sec_dia_start}")
+
+    # Chart 2: DoughnutChart — Distribución por Método
+    c2 = DoughnutChart()
+    c2.title = "Distribución por Método"
+    c2.holeSize = 50
+    c2.width = 12
+    c2.height = 9
+    c2.add_data(Reference(ws, min_col=3, min_row=sec_met_data_start,
+                          max_row=sec_met_data_end))
+    c2.set_categories(Reference(ws, min_col=1, min_row=sec_met_data_start,
+                                max_row=sec_met_data_end))
+    n_met = sec_met_data_end - sec_met_data_start + 1
+    color_points(c2.series[0], [GREEN_PALETTE[i % len(GREEN_PALETTE)] for i in range(n_met)])
+    ws.add_chart(c2, f"G{sec_met_start}")
+
+    # Chart 3: BarChart horizontal — Top Cuentas
+    c3 = BarChart()
+    c3.type = "bar"
+    c3.title = "Top Cuentas"
+    c3.x_axis.title = "MXN"
+    n_cta = sec_cta_data_end - sec_cta_data_start + 1
+    c3.width = 14
+    c3.height = max(7.0, 1.2 * n_cta)
+    c3.add_data(Reference(ws, min_col=3, min_row=sec_cta_data_start - 1,
+                          max_row=sec_cta_data_end), titles_from_data=True)
+    c3.set_categories(Reference(ws, min_col=1, min_row=sec_cta_data_start,
+                                max_row=sec_cta_data_end))
+    color_points(c3.series[0], ["15803D"] * n_cta)
+    ws.add_chart(c3, f"G{sec_cta_start}")
+
+    # Chart 4: PieChart — Estado de Clientes
+    c4 = PieChart()
+    c4.title = "Estado de Clientes"
+    c4.width = 12
+    c4.height = 9
+    c4.add_data(Reference(ws, min_col=2, min_row=sec_cli_data_start,
+                          max_row=sec_cli_data_start + 2))
+    c4.set_categories(Reference(ws, min_col=1, min_row=sec_cli_data_start,
+                                max_row=sec_cli_data_start + 2))
+    color_points(c4.series[0], ["15803D", "D97706", "DC2626"])
+    ws.add_chart(c4, f"G{sec_cli_start}")
+
+    ws.freeze_panes = "A3"
 
     buf = BytesIO()
     wb.save(buf)
@@ -1074,7 +1119,11 @@ def generar_pdf_reporte(data: dict) -> bytes:
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable, Flowable, KeepTogether
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics.charts.barcharts import VerticalBarChart, HorizontalBarChart
+    from reportlab.graphics.charts.piecharts import Pie
+    from reportlab.graphics import renderPDF
 
     PRIMARY   = colors.HexColor("#1E3A8A")
     GREEN     = colors.HexColor("#15803D")
@@ -1082,6 +1131,25 @@ def generar_pdf_reporte(data: dict) -> bytes:
     LIGHT     = colors.HexColor("#F8FAFC")
     GRID_CLR  = colors.HexColor("#CBD5E1")
     ALT_ROW   = colors.HexColor("#F1F5F9")
+    NARANJA   = colors.HexColor("#D97706")
+    ROJO      = colors.HexColor("#DC2626")
+    GREEN_SHADES = [
+        colors.HexColor("#15803D"), colors.HexColor("#22C55E"),
+        colors.HexColor("#4ADE80"), colors.HexColor("#86EFAC"),
+        colors.HexColor("#166534"), colors.HexColor("#BBF7D0"),
+    ]
+
+    _PAGE_W = 7.0 * inch  # ancho disponible (8.5" - 2 * 0.75" márgenes)
+
+    class _ChartFlowable(Flowable):
+        def __init__(self, drawing: Drawing):
+            super().__init__()
+            self.drawing = drawing
+            self.width = _PAGE_W
+            self.height = drawing.height
+        def draw(self):
+            x = (_PAGE_W - self.drawing.width) / 2
+            renderPDF.draw(self.drawing, self.canv, x, 0)
 
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter,
@@ -1119,6 +1187,16 @@ def generar_pdf_reporte(data: dict) -> bytes:
         t.setStyle(ts)
         return t
 
+    total_local_count = sum(m["count"] for m in data["por_metodo"])
+    total_local_monto = sum(m["total"] for m in data["por_metodo"])
+    todas_cuentas_pdf = sorted(
+        [c for m in data["por_metodo"] for c in m["cuentas"]],
+        key=lambda x: -x["total"],
+    )
+    rc = data["resumen_clientes"]
+    total_estado = rc["activos"] + rc["suspendidos"] + rc["cancelados"]
+    pct_estado = round(total_estado / rc["total_real"] * 100, 1) if rc["total_real"] else 0
+
     elems = []
 
     # ── Encabezado ─────────────────────────────────────────────────────────
@@ -1127,14 +1205,12 @@ def generar_pdf_reporte(data: dict) -> bytes:
         f"Reporte de Ingresos: {data['fecha_inicio']} al {data['fecha_fin']}", sub_style))
     elems.append(HRFlowable(width="100%", thickness=1.5, color=PRIMARY, spaceAfter=10))
 
-    # KPIs en una mini-tabla horizontal
-    kpi_data = [
-        ["Total ingresado", "Facturas cobradas", "Total pendiente"],
-        [f"${data['total_ingresado']:,.2f}",
-         str(data["total_facturas_pagadas"]),
-         f"${data['total_pendiente']:,.2f}"],
-    ]
-    kpi_t = Table(kpi_data, colWidths=[2.2 * inch, 2 * inch, 2.2 * inch])
+    kpi_t = Table(
+        [["Total ingresado", "Total de Pagos", "Total pendiente"],
+         [f"${data['total_ingresado']:,.2f}", str(data["total_facturas_pagadas"]),
+          f"${data['total_pendiente']:,.2f}"]],
+        colWidths=[2.2 * inch, 2 * inch, 2.2 * inch],
+    )
     kpi_t.setStyle(TableStyle([
         ("BACKGROUND",  (0, 0), (-1, 0), LIGHT),
         ("FONTNAME",    (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -1154,122 +1230,72 @@ def generar_pdf_reporte(data: dict) -> bytes:
     elems.append(kpi_t)
     elems.append(Spacer(1, 0.25 * inch))
 
-    # ── Ingresos por Día ───────────────────────────────────────────────────
+    # ── Tablas ─────────────────────────────────────────────────────────────
     elems.append(Paragraph("Ingresos por Día", section_style))
     dia_rows = [
-        [d["fecha"],
-         str(d["count_pagadas"]),
-         f"${d['total_pagado']:,.2f}",
-         str(d["count_pendientes"]),
-         f"${d['total_pendiente']:,.2f}"]
+        [d["fecha"], str(d["count_pagadas"]), f"${d['total_pagado']:,.2f}",
+         str(d["count_pendientes"]), f"${d['total_pendiente']:,.2f}"]
         for d in data["por_dia"]
     ]
-    dia_rows.append([
-        "TOTAL",
-        str(data["total_facturas_pagadas"]),
-        f"${data['total_ingresado']:,.2f}",
-        "",
-        f"${data['total_pendiente']:,.2f}",
-    ])
+    dia_rows.append(["TOTAL", str(data["total_facturas_pagadas"]),
+                     f"${data['total_ingresado']:,.2f}", "", f"${data['total_pendiente']:,.2f}"])
     dia_t = make_table(
         ["Fecha", "Pagos recibidos", "Total cobrado", "Pagos pendientes", "Total pendiente"],
-        dia_rows,
-        [1.4 * inch, 1.1 * inch, 1.5 * inch, 1.1 * inch, 1.5 * inch],
-        PRIMARY,
+        dia_rows, [1.4 * inch, 1.1 * inch, 1.5 * inch, 1.1 * inch, 1.5 * inch], PRIMARY,
     )
-    # Bold last row (total)
-    last = len(dia_rows)
     dia_t.setStyle(TableStyle([
-        ("FONTNAME", (0, last), (-1, last), "Helvetica-Bold"),
-        ("BACKGROUND", (0, last), (-1, last), colors.HexColor("#DBEAFE")),
+        ("FONTNAME",   (0, len(dia_rows)), (-1, len(dia_rows)), "Helvetica-Bold"),
+        ("BACKGROUND", (0, len(dia_rows)), (-1, len(dia_rows)), colors.HexColor("#DBEAFE")),
     ]))
     elems.append(dia_t)
     elems.append(Spacer(1, 0.2 * inch))
-
-    # ── Por Método de Pago ─────────────────────────────────────────────────
-    total_local_count = sum(m["count"] for m in data["por_metodo"])
-    total_local_monto = sum(m["total"] for m in data["por_metodo"])
 
     elems.append(Paragraph("Ingresos por Método de Pago", section_style))
     met1_rows = [[m["metodo"], str(m["count"]), f"${m['total']:,.2f}"] for m in data["por_metodo"]]
     met1_rows.append(["TOTAL", str(total_local_count), f"${total_local_monto:,.2f}"])
     met1_t = make_table(
         ["Método de Pago", "Pagos", "Total cobrado"],
-        met1_rows,
-        [2.5 * inch, 1.0 * inch, 2.7 * inch],
-        GREEN,
+        met1_rows, [2.5 * inch, 1.0 * inch, 2.7 * inch], GREEN,
     )
-    last_m1 = len(met1_rows)
     met1_t.setStyle(TableStyle([
-        ("FONTNAME",   (0, last_m1), (-1, last_m1), "Helvetica-Bold"),
-        ("BACKGROUND", (0, last_m1), (-1, last_m1), colors.HexColor("#DCFCE7")),
+        ("FONTNAME",   (0, len(met1_rows)), (-1, len(met1_rows)), "Helvetica-Bold"),
+        ("BACKGROUND", (0, len(met1_rows)), (-1, len(met1_rows)), colors.HexColor("#DCFCE7")),
     ]))
     elems.append(met1_t)
     elems.append(Spacer(1, 0.15 * inch))
 
     elems.append(Paragraph("Desglose por Cuenta", section_style))
-    met2_rows = []
-    subtotal_rows: list[int] = []
-    for m in data["por_metodo"]:
-        cuentas = m["cuentas"]
-        for i, c in enumerate(cuentas):
-            met2_rows.append([
-                m["metodo"] if i == 0 else "",
-                c["cuenta"],
-                str(c["count"]),
-                f"${c['total']:,.2f}",
-            ])
-        if len(cuentas) > 1:
-            subtotal_rows.append(len(met2_rows) + 1)
-            met2_rows.append(["", "  Subtotal", str(m["count"]), f"${m['total']:,.2f}"])
-    met2_rows.append(["TOTAL", "", str(total_local_count), f"${total_local_monto:,.2f}"])
+    met2_rows = [[c["cuenta"], str(c["count"]), f"${c['total']:,.2f}"] for c in todas_cuentas_pdf]
+    met2_rows.append(["TOTAL", str(total_local_count), f"${total_local_monto:,.2f}"])
     met2_t = make_table(
-        ["Método de Pago", "Cuenta", "Pagos", "Total cobrado"],
-        met2_rows,
-        [1.8 * inch, 1.7 * inch, 0.8 * inch, 1.9 * inch],
-        GREEN,
+        ["Cuenta", "Pagos", "Total cobrado"],
+        met2_rows, [2.8 * inch, 0.9 * inch, 1.6 * inch], GREEN,
     )
-    last_m2 = len(met2_rows)
     met2_t.setStyle(TableStyle([
-        ("FONTNAME",   (0, last_m2), (-1, last_m2), "Helvetica-Bold"),
-        ("BACKGROUND", (0, last_m2), (-1, last_m2), colors.HexColor("#DCFCE7")),
+        ("FONTNAME",   (0, len(met2_rows)), (-1, len(met2_rows)), "Helvetica-Bold"),
+        ("BACKGROUND", (0, len(met2_rows)), (-1, len(met2_rows)), colors.HexColor("#DCFCE7")),
     ]))
-    for sr in subtotal_rows:
-        met2_t.setStyle(TableStyle([
-            ("FONTNAME",   (0, sr), (-1, sr), "Helvetica-BoldOblique"),
-            ("BACKGROUND", (0, sr), (-1, sr), colors.HexColor("#ECFDF5")),
-        ]))
     elems.append(met2_t)
     elems.append(Spacer(1, 0.2 * inch))
 
-    # ── Resumen de Clientes ────────────────────────────────────────────────
     elems.append(Paragraph("Resumen de Clientes", section_style))
-    rc = data["resumen_clientes"]
-
-    # Tabla A: Estado del servicio (excluyentes)
-    total_estado = rc["activos"] + rc["suspendidos"] + rc["cancelados"]
-    pct_estado = round(total_estado / rc["total_real"] * 100, 1) if rc["total_real"] else 0
     cli_rows = [
         ["Activos",     str(rc["activos"]),     f"{rc['pct_activos']}%"],
         ["Suspendidos", str(rc["suspendidos"]),  f"{rc['pct_suspendidos']}%"],
         ["Cancelados",  str(rc["cancelados"]),   f"{rc['pct_cancelados']}%"],
-        ["TOTAL", str(total_estado), f"{pct_estado}%"],
+        ["TOTAL",       str(total_estado),        f"{pct_estado}%"],
     ]
     cli_t = make_table(
         ["Estado del Servicio", "Clientes", "% del total"],
-        cli_rows,
-        [2.8 * inch, 1.3 * inch, 2.1 * inch],
-        PURPLE,
+        cli_rows, [2.8 * inch, 1.3 * inch, 2.1 * inch], PURPLE,
     )
-    last_c = len(cli_rows)
     cli_t.setStyle(TableStyle([
-        ("FONTNAME",   (0, last_c), (-1, last_c), "Helvetica-Bold"),
-        ("BACKGROUND", (0, last_c), (-1, last_c), colors.HexColor("#EDE9FE")),
+        ("FONTNAME",   (0, len(cli_rows)), (-1, len(cli_rows)), "Helvetica-Bold"),
+        ("BACKGROUND", (0, len(cli_rows)), (-1, len(cli_rows)), colors.HexColor("#EDE9FE")),
     ]))
     elems.append(cli_t)
     elems.append(Spacer(1, 0.15 * inch))
 
-    # Tabla B: Indicadores de cartera
     AMBER = colors.HexColor("#B45309")
     ind_rows = [
         ["Activos con deuda",        str(rc["activos_con_deuda"]),     f"{rc['pct_activos_con_deuda']}%"],
@@ -1278,12 +1304,117 @@ def generar_pdf_reporte(data: dict) -> bytes:
     ]
     ind_t = make_table(
         ["Indicadores de Cartera", "Clientes", "% del total"],
-        ind_rows,
-        [2.8 * inch, 1.3 * inch, 2.1 * inch],
-        AMBER,
+        ind_rows, [2.8 * inch, 1.3 * inch, 2.1 * inch], AMBER,
     )
     elems.append(ind_t)
-    elems.append(Spacer(1, 0.2 * inch))
+    elems.append(Spacer(1, 0.3 * inch))
+
+    # ── Gráficas ───────────────────────────────────────────────────────────
+    elems.append(HRFlowable(width="100%", thickness=1, color=GRID_CLR, spaceAfter=6))
+    elems.append(Paragraph("Gráficas", section_style))
+
+    # Chart 1: Ingresos por Día
+    if data["por_dia"]:
+        _pw = 7.0 * inch
+        d = Drawing(_pw, 2.8 * inch)
+        bc = VerticalBarChart()
+        bc.x, bc.y = 45, 20
+        bc.width, bc.height = _pw - 60, 2.2 * inch
+        bc.data = [[dia["total_pagado"] for dia in data["por_dia"]]]
+        bc.categoryAxis.categoryNames = [dia["fecha"] for dia in data["por_dia"]]
+        bc.categoryAxis.labels.angle = 30 if len(data["por_dia"]) > 4 else 0
+        bc.categoryAxis.labels.fontSize = 7
+        bc.valueAxis.labelTextFormat = lambda v: f"${v:,.0f}"
+        bc.valueAxis.labels.fontSize = 7
+        bc.bars[0].fillColor = PRIMARY
+        bc.bars[0].strokeColor = PRIMARY
+        bc.groupSpacing = 5
+        d.add(bc)
+        elems.append(KeepTogether([
+            Paragraph("Ingresos por Día", section_style),
+            _ChartFlowable(d),
+            Spacer(1, 0.2 * inch),
+        ]))
+
+    # Chart 2: Distribución por Método
+    if data["por_metodo"] and total_local_monto:
+        _pie_sz = 3.8 * inch
+        d = Drawing(_pie_sz, _pie_sz)
+        pie = Pie()
+        pie.x, pie.y = 50, 30
+        pie.width = pie.height = _pie_sz - 80
+        pie.data = [m["total"] for m in data["por_metodo"]]
+        pie.labels = [
+            f"{m['metodo']}\n${m['total']:,.0f} ({round(m['total']/total_local_monto*100,1)}%)"
+            for m in data["por_metodo"]
+        ]
+        pie.sideLabels = True
+        pie.simpleLabels = False
+        pie.sideLabelsOffset = 0.08
+        for i, shade in enumerate(GREEN_SHADES[:len(data["por_metodo"])]):
+            pie.slices[i].fillColor = shade
+        pie.slices.strokeColor = colors.white
+        pie.slices.strokeWidth = 0.5
+        d.add(pie)
+        elems.append(KeepTogether([
+            Paragraph("Distribución por Método de Pago", section_style),
+            _ChartFlowable(d),
+            Spacer(1, 0.2 * inch),
+        ]))
+
+    # Chart 3: Top Cuentas
+    top_cuentas = todas_cuentas_pdf[:8]
+    if top_cuentas:
+        _ch = max(2.0 * inch, 0.35 * inch * len(top_cuentas))
+        d = Drawing(7.0 * inch, _ch + 0.5 * inch)
+        hbc = HorizontalBarChart()
+        hbc.x, hbc.y = 110, 20
+        hbc.width = 7.0 * inch - 130
+        hbc.height = _ch
+        hbc.data = [[c["total"] for c in top_cuentas]]
+        hbc.categoryAxis.categoryNames = [c["cuenta"] for c in top_cuentas]
+        hbc.categoryAxis.labels.fontSize = 7
+        hbc.categoryAxis.labels.dx = -5
+        hbc.valueAxis.labelTextFormat = lambda v: f"${v:,.0f}"
+        hbc.valueAxis.labels.fontSize = 7
+        hbc.bars[0].fillColor = GREEN
+        hbc.bars[0].strokeColor = GREEN
+        hbc.reversePlotOrder = True
+        d.add(hbc)
+        elems.append(KeepTogether([
+            Paragraph("Top Cuentas por Monto", section_style),
+            _ChartFlowable(d),
+            Spacer(1, 0.2 * inch),
+        ]))
+
+    # Chart 4: Estado de Clientes
+    rc_data = [
+        (rc["activos"],     "Activos",     rc["pct_activos"],     GREEN),
+        (rc["suspendidos"], "Suspendidos", rc["pct_suspendidos"], NARANJA),
+        (rc["cancelados"],  "Cancelados",  rc["pct_cancelados"],  ROJO),
+    ]
+    visible = [(v, l, pct, c) for v, l, pct, c in rc_data if v > 0]
+    if visible:
+        _pie_sz = 3.8 * inch
+        d = Drawing(_pie_sz, _pie_sz)
+        pie = Pie()
+        pie.x, pie.y = 50, 30
+        pie.width = pie.height = _pie_sz - 80
+        pie.data   = [v for v, _, _, _ in visible]
+        pie.labels = [f"{l}\n{v} ({pct}%)" for v, l, pct, _ in visible]
+        pie.sideLabels = True
+        pie.simpleLabels = False
+        pie.sideLabelsOffset = 0.08
+        for i, (_, _, _, color) in enumerate(visible):
+            pie.slices[i].fillColor = color
+        pie.slices.strokeColor = colors.white
+        pie.slices.strokeWidth = 0.5
+        d.add(pie)
+        elems.append(KeepTogether([
+            Paragraph("Estado de Clientes", section_style),
+            _ChartFlowable(d),
+            Spacer(1, 0.2 * inch),
+        ]))
 
     # ── Pie ────────────────────────────────────────────────────────────────
     elems.append(HRFlowable(width="100%", thickness=0.5, color=GRID_CLR))

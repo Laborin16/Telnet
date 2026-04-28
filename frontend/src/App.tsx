@@ -15,6 +15,7 @@ import apiClient from "./core/api/apiClient";
 
 type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "usuarios";
 const PAGE_SIZE = 25;
+const ALERTA_ORDER: Record<string, number> = { critico: 0, pendiente: 1, suspendido: 2, normal: 3 };
 
 const NAV_ITEMS: { key: Tab; label: string; icon: string; adminOnly?: boolean }[] = [
   { key: "clientes",  label: "Clientes",  icon: "👥" },
@@ -71,8 +72,6 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
 
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
   const handleStatus = (v: Set<string>) => { setStatus(v); setPage(1); };
-
-  const ALERTA_ORDER: Record<string, number> = { critico: 0, pendiente: 1, suspendido: 2, normal: 3 };
 
   const planesUnicos = useMemo(() => {
     if (!allClients) return [];

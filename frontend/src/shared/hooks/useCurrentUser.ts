@@ -11,7 +11,9 @@ function readStored(): CurrentUser | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw) as CurrentUser;
-  } catch {}
+  } catch {
+    // ignore malformed localStorage
+  }
   return null;
 }
 

@@ -89,7 +89,7 @@ export function useDashboardStats(dateFrom: string | null, dateTo: string | null
       }
 
       if (inRange(c.fecha_instalacion, dateFrom, dateTo)) nuevasInstalaciones++;
-      if (inRange(c.fecha_cancelacion, dateFrom, dateTo)) cancelaciones++;
+      if (c.estado === "Cancelado" && inRange(c.fecha_cancelacion, dateFrom, dateTo)) cancelaciones++;
     }
 
     const hasPeriod = dateFrom || dateTo;

@@ -322,11 +322,11 @@ export function useGuardarEstadoEquipo() {
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ["recoleccion"] });
       const previous = queryClient.getQueryData(["recoleccion"]);
-      queryClient.setQueryData(["recoleccion"], (old: any) => {
+      queryClient.setQueryData(["recoleccion"], (old: RecoleccionData | undefined) => {
         if (!old) return old;
         return {
           ...old,
-          items: old.items.map((item: any) =>
+          items: old.items.map((item: ItemRecoleccion) =>
             item.id_servicio === variables.id_servicio
               ? {
                   ...item,
@@ -341,7 +341,7 @@ export function useGuardarEstadoEquipo() {
       });
       return { previous };
     },
-    onError: (_err: any, _variables: any, context: any) => {
+    onError: (_err, _variables, context) => {
       if (context?.previous) {
         queryClient.setQueryData(["recoleccion"], context.previous);
       }

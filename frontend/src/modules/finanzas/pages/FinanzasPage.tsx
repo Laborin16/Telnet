@@ -63,7 +63,6 @@ interface WeekOption { monday: string; label: string; weekNum: number; year: num
 
 const currentMondayDate = getMondayOf(new Date());
 const currentMonday = toISODate(currentMondayDate);
-const today = toISODate(new Date());
 
 function buildWeekOptions(): WeekOption[] {
   const options: WeekOption[] = [];
@@ -90,6 +89,7 @@ type TabKey = "hoy" | "1_a_3" | "mas_de_3";
 type ClientePagoType = ClienteAlerta & { id_factura: number; total: number };
 
 export function FinanzasPage() {
+  const today = toISODate(new Date());
   const [viewMode, setViewMode] = useState<"semana" | "dia" | "cobranza" | "recoleccion" | "historial">("semana");
   const [weekStart, setWeekStart] = useState<string>(currentMonday);
   const [selectedDate, setSelectedDate] = useState<string>(today);

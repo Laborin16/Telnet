@@ -122,6 +122,10 @@ function MetodoPagoCard({ title, data, color }: { title: string; data: { nombre:
   const totalCount = data.reduce((s, d) => s + d.count, 0);
   const hasData = totalCount > 0;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tooltipFormatter: any = (value: number, _: string, props: { payload?: { count?: number } }) =>
+    [`${fmt.format(value)} · ${props.payload?.count ?? 0} pagos`, ""];
+
   return (
     <div style={{ backgroundColor: "white", borderRadius: "10px", border: "1px solid #e2e8f0", padding: "20px", flex: 1, minWidth: "220px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
@@ -154,10 +158,7 @@ function MetodoPagoCard({ title, data, color }: { title: string; data: { nombre:
             tickLine={false}
           />
           <Tooltip
-            formatter={((value: number, _: string, props: { payload?: { count?: number } }) => [
-              `${fmt.format(value)} · ${props.payload?.count ?? 0} pagos`,
-              "",
-            ]) as any}
+            formatter={tooltipFormatter}
             contentStyle={{ fontSize: "12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}
           />
           <Bar dataKey="monto" radius={[0, 4, 4, 0]}>

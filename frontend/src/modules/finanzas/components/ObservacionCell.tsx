@@ -18,8 +18,8 @@ export function ObservacionCell({ entityType, entityId, value }: Props) {
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  // Sync if parent value changes (e.g. after refetch)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSaved(value ?? "");
     setText(value ?? "");
   }, [value]);
