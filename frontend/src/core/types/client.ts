@@ -20,7 +20,7 @@ export interface Tecnico {
   nombre: string;
 }
 
-export type EstadoServicio = "Activo" | "Suspendido" | "Cancelado";
+export type EstadoServicio = "Activo" | "Suspendido" | "Recoleccion" | "Cancelado";
 export type AlertaCorte = "normal" | "critico" | "pendiente" | "suspendido";
 
 export interface ClientItem {

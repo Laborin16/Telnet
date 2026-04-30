@@ -9,11 +9,13 @@ from modules.whatsapp.router import router as whatsapp_router
 from modules.finanzas.router import router as finanzas_router
 from modules.auditlog.router import router as audit_router
 from modules.auth.router import router as auth_router
+from modules.reportes.routes import router as reportes_router
 from db.session import engine
 from db.base import Base
 import modules.finanzas.models   # noqa: F401
 import modules.auditlog.models   # noqa: F401
 import modules.auth.models       # noqa: F401 — registers Usuario with Base
+import modules.reportes.models   # noqa: F401
 
 
 @asynccontextmanager
@@ -43,7 +45,8 @@ app.include_router(clients_router, prefix="/api/v1/clients", tags=["clients"])
 app.include_router(whatsapp_router, prefix="/api/v1/whatsapp", tags=["whatsapp"])
 app.include_router(finanzas_router, prefix="/api/v1/finanzas", tags=["finanzas"])
 app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"])
-app.include_router(auth_router,  prefix="/api/v1/auth",  tags=["auth"])
+app.include_router(auth_router,     prefix="/api/v1/auth",     tags=["auth"])
+app.include_router(reportes_router, prefix="/api/v1/reportes", tags=["reportes"])
 
 
 @app.get("/api/v1/health")

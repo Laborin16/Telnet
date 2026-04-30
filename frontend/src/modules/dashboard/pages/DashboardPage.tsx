@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useDashboardStats } from "../../finanzas/hooks/useDashboardStats";
 import { useMetodosPagoStats } from "../../finanzas/hooks/useMetodosPagoStats";
+import { useRecoleccion } from "../../finanzas/hooks/useCobranza";
 import { KPICard } from "../../finanzas/components/KPICard";
 import { PlanBarChart } from "../../finanzas/components/PlanBarChart";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from "recharts";
@@ -20,7 +21,13 @@ export function DashboardPage({ onNavigateToClients }: DashboardPageProps) {
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
 
-  const stats = useDashboardStats(dateFrom || null, dateTo || null);
+  const { data: recoleccionData } = useRecoleccion();
+  const recoleccionIds = useMemo(
+    () => new Set((recoleccionData?.items ?? []).map(i => i.id_servicio)),
+    [recoleccionData]
+  );
+
+  const stats = useDashboardStats(dateFrom || null, dateTo || null, recoleccionIds);
   const metodos = useMetodosPagoStats("", dateFrom || null, dateTo || null);
 
   if (stats.isLoading) return <p style={{ color: "#64748b", padding: "16px" }}>Cargando datos...</p>;
@@ -57,6 +64,7 @@ export function DashboardPage({ onNavigateToClients }: DashboardPageProps) {
       <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
         <KPICard title="Activos" value={stats.activos} subtitle={`${pct(stats.activos, stats.total)} del total`} accentColor="#16a34a" />
         <KPICard title="Suspendidos" value={stats.suspendidos} subtitle={`${pct(stats.suspendidos, stats.total)} del total`} accentColor="#d97706" />
+        <KPICard title="Recolección" value={stats.recoleccion} subtitle={`${pct(stats.recoleccion, stats.total)} del total`} accentColor="#7c3aed" />
         <KPICard title="Cancelados" value={stats.cancelados} subtitle={`${pct(stats.cancelados, stats.total)} del total`} accentColor="#dc2626" />
       </div>
 
@@ -66,7 +74,7 @@ export function DashboardPage({ onNavigateToClients }: DashboardPageProps) {
           Movimientos del periodo
         </p>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <KPICard title="Nuevas Instalaciones" value={stats.periodStats.nuevasInstalaciones} accentColor="#1e40af" />
+          <KPICard title="Instalaciones" value={stats.periodStats.nuevasInstalaciones} accentColor="#1e40af" />
           <KPICard title="Cancelaciones" value={stats.periodStats.cancelaciones} accentColor="#dc2626" />
           <KPICard
             title="Crecimiento Neto"

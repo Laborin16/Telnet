@@ -9,11 +9,11 @@ import { FinanzasPage } from "./modules/finanzas/pages/FinanzasPage";
 import { AuditLogPage } from "./modules/auditlog/pages/AuditLogPage";
 import { LoginPage } from "./modules/auth/pages/LoginPage";
 import { UsuariosPage } from "./modules/auth/pages/UsuariosPage";
-import { useObservaciones } from "./modules/finanzas/hooks/useCobranza";
+import { useObservaciones, useRecoleccion } from "./modules/finanzas/hooks/useCobranza";
 import { useAuth } from "./modules/auth/hooks/useAuth";
 import apiClient from "./core/api/apiClient";
 
-type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "usuarios";
+type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "usuarios";
 const PAGE_SIZE = 25;
 const ALERTA_ORDER: Record<string, number> = { critico: 0, pendiente: 1, suspendido: 2, normal: 3 };
 
@@ -22,6 +22,7 @@ const NAV_ITEMS: { key: Tab; label: string; icon: string; adminOnly?: boolean }[
   { key: "dashboard", label: "Dashboard", icon: "📊" },
   { key: "finanzas",  label: "Finanzas",  icon: "💰" },
   { key: "auditoria", label: "Auditoría", icon: "📋" },
+  { key: "tareas",    label: "Tareas",    icon: ""},
   { key: "usuarios",  label: "Usuarios",  icon: "🔑", adminOnly: true },
 ];
 
@@ -66,6 +67,11 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
 
   const debouncedSearch = useDebounce(search, 200);
   const { data: allClients, isLoading, isError } = useAllClients();
+  const { data: recoleccionData } = useRecoleccion();
+  const recoleccionIds = useMemo(
+    () => new Set((recoleccionData?.items ?? []).map(i => i.id_servicio)),
+    [recoleccionData]
+  );
   const pageIds = useMemo(() => (allClients ?? []).map(c => c.id_servicio), [allClients]);
   const { data: obsClientes } = useObservaciones("cliente", pageIds, tab === "clientes");
   const { data: detail, isLoading: detailLoading } = useClientDetail(selectedId);
@@ -92,7 +98,8 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
     const q = debouncedSearch.toLowerCase();
     return allClients
       .filter(c => {
-        const matchStatus = status.size === 0 || status.has(c.estado);
+        const estadoEfectivo = (recoleccionIds.has(c.id_servicio) && c.estado === "Suspendido") ? "Recoleccion" : c.estado;
+        const matchStatus = status.size === 0 || status.has(estadoEfectivo);
         const matchAlerta = alerta.size === 0 || (c.alerta_corte !== null && alerta.has(c.alerta_corte));
         const matchSearch = !q ||
           c.nombre.toLowerCase().includes(q) ||
@@ -108,7 +115,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
         if (oa !== ob) return oa - ob;
         return (a.dias_para_corte ?? 999) - (b.dias_para_corte ?? 999);
       });
-  }, [allClients, status, alerta, debouncedSearch, planFiltro, zonaFiltro]);
+  }, [allClients, status, alerta, debouncedSearch, planFiltro, zonaFiltro, recoleccionIds]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const start      = (page - 1) * PAGE_SIZE;
@@ -294,6 +301,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                     options={[
                       { value: "Activo", label: "Activo" },
                       { value: "Suspendido", label: "Suspendido" },
+                      { value: "Recoleccion", label: "Recolección" },
                       { value: "Cancelado", label: "Cancelado" },
                     ]}
                     selected={status} onChange={handleStatus} placeholder="Todos los estados"
@@ -318,10 +326,10 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginRight: "2px" }}>Alerta:</span>
                   {[
-                    { key: "",           label: "Todos",     color: "#64748b", activeBg: "#f1f5f9" },
-                    { key: "pendiente",  label: "Pendiente", color: "#d97706", activeBg: "#fffbeb" },
-                    { key: "suspendido", label: "Suspendido",color: "#64748b", activeBg: "#f8fafc" },
-                    { key: "normal",     label: "Normal",    color: "#16a34a", activeBg: "#f0fdf4" },
+                    { key: "",           label: "Todos",      color: "#64748b", activeBg: "#f1f5f9" },
+                    { key: "pendiente",  label: "Pendiente",  color: "#d97706", activeBg: "#fffbeb" },
+                    { key: "suspendido", label: "Suspendido", color: "#64748b", activeBg: "#f8fafc" },
+                    { key: "normal",     label: "Normal",     color: "#16a34a", activeBg: "#f0fdf4" },
                   ].map(({ key, label, color, activeBg }) => {
                     const isActive = key === "" ? alerta.size === 0 && !status.has("Cancelado") : alerta.has(key);
                     return (
@@ -343,6 +351,26 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                       </button>
                     );
                   })}
+                  {(() => {
+                    const isActive = status.has("Recoleccion");
+                    return (
+                      <button onClick={() => {
+                        setPage(1);
+                        setAlerta(new Set());
+                        const next = new Set(status);
+                        if (next.has("Recoleccion")) next.delete("Recoleccion"); else { next.clear(); next.add("Recoleccion"); }
+                        setStatus(next);
+                      }} style={{
+                        padding: "3px 11px", borderRadius: "20px",
+                        border: `1px solid ${isActive ? "#7c3aed" : "#e2e8f0"}`,
+                        background: isActive ? "#f5f3ff" : "transparent",
+                        color: isActive ? "#7c3aed" : "#64748b",
+                        fontSize: "12px", fontWeight: isActive ? 600 : 400, cursor: "pointer",
+                      }}>
+                        Recolección
+                      </button>
+                    );
+                  })()}
                   {(() => {
                     const isActive = status.has("Cancelado");
                     return (
@@ -376,7 +404,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                     border: "1px solid #e2e8f0", boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                     overflow: "hidden",
                   }}>
-                    <ClientsTable clients={pageItems} onSelect={id => setSelectedId(id)} obsMap={obsClientes} />
+                    <ClientsTable clients={pageItems} onSelect={id => setSelectedId(id)} obsMap={obsClientes} recoleccionIds={recoleccionIds} />
                   </div>
 
                   <div style={{ marginTop: "14px", display: "flex", gap: "4px", alignItems: "center", justifyContent: "space-between" }}>

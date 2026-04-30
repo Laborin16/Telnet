@@ -565,7 +565,7 @@ async def get_recoleccion(db: AsyncSession) -> dict:
     items = []
     for srv_id, fdata in vmap.items():
         c = clientes.get(srv_id, {})
-        if c.get("estado") == "Cancelado":
+        if c.get("estado") != "Suspendido":
             continue
         items.append({
             "id_servicio": srv_id,
@@ -820,12 +820,13 @@ async def get_reporte_semanal_data(fecha_inicio: str, fecha_fin: str, db: AsyncS
     clientes = clientes_data.get("results", [])
     total_clientes = len(clientes)
 
-    activos     = sum(1 for c in clientes if c.get("estado") == "Activo")
-    suspendidos = sum(1 for c in clientes if c.get("estado") == "Suspendido")
-    cancelados  = sum(1 for c in clientes if c.get("estado") == "Cancelado")
+    _estado_cliente: dict[int, str] = {
+        c.get("id_servicio"): c.get("estado", "")
+        for c in clientes
+        if c.get("id_servicio")
+    }
 
-    # Indicadores de cartera (informativos — pueden solaparse con estados)
-    # Clientes únicos con al menos una factura Pendiente de Pago
+    # Indicadores de cartera
     pendientes_pago_ids: set[int] = set()
     en_recoleccion: set[int] = set()
     for f in results:
@@ -852,16 +853,19 @@ async def get_reporte_semanal_data(fecha_inicio: str, fecha_fin: str, db: AsyncS
             srv_id = (art.get("servicio") or {}).get("id_servicio")
             if srv_id:
                 pendientes_pago_ids.add(srv_id)
-                if (today - fecha_ref).days >= 7:
+                # Recolección: suspendido con 7+ días vencidos
+                if (today - fecha_ref).days >= 7 and _estado_cliente.get(srv_id) == "Suspendido":
                     en_recoleccion.add(srv_id)
 
-    _estado_cliente: dict[int, str] = {
-        c.get("id_servicio"): c.get("estado", "")
-        for c in clientes
-        if c.get("id_servicio")
-    }
+    # 4 estados excluyentes: Activo / Suspendido (puro) / Recolección / Cancelado
+    recoleccion_count = len(en_recoleccion)
+    activos     = sum(1 for c in clientes if c.get("estado") == "Activo")
+    suspendidos = sum(1 for c in clientes if c.get("estado") == "Suspendido") - recoleccion_count
+    cancelados  = sum(1 for c in clientes if c.get("estado") == "Cancelado")
+
     activos_con_deuda     = sum(1 for sid in pendientes_pago_ids if _estado_cliente.get(sid) == "Activo")
-    suspendidos_con_deuda = sum(1 for sid in pendientes_pago_ids if _estado_cliente.get(sid) == "Suspendido")
+    suspendidos_con_deuda = sum(1 for sid in pendientes_pago_ids
+                                if _estado_cliente.get(sid) == "Suspendido" and sid not in en_recoleccion)
 
     def pct(n: int, total: int) -> float:
         return round(n / total * 100, 1) if total else 0.0
@@ -879,23 +883,25 @@ async def get_reporte_semanal_data(fecha_inicio: str, fecha_fin: str, db: AsyncS
         "por_dia": sorted(list(por_dia.values()), key=lambda x: x["fecha"]),
         "por_metodo": por_metodo,
         "resumen_clientes": {
-            # Sección A: estados del servicio (excluyentes → suman correctamente)
+            # 4 estados excluyentes
             "total_real": total_clientes,
             "activos": activos,
             "suspendidos": suspendidos,
+            "recoleccion": recoleccion_count,
             "cancelados": cancelados,
             "pct_activos": pct(activos, total_clientes),
             "pct_suspendidos": pct(suspendidos, total_clientes),
+            "pct_recoleccion": pct(recoleccion_count, total_clientes),
             "pct_cancelados": pct(cancelados, total_clientes),
-            # Sección B: indicadores de cartera (pueden solaparse con A)
+            # Indicadores de cartera
             "pendientes_de_pago": len(pendientes_pago_ids),
             "activos_con_deuda": activos_con_deuda,
             "suspendidos_con_deuda": suspendidos_con_deuda,
-            "en_recoleccion": len(en_recoleccion),
+            "en_recoleccion": recoleccion_count,
             "pct_pendientes_de_pago": pct(len(pendientes_pago_ids), total_clientes),
             "pct_activos_con_deuda": pct(activos_con_deuda, total_clientes),
             "pct_suspendidos_con_deuda": pct(suspendidos_con_deuda, total_clientes),
-            "pct_en_recoleccion": pct(len(en_recoleccion), total_clientes),
+            "pct_en_recoleccion": pct(recoleccion_count, total_clientes),
         },
     }
 
@@ -1025,15 +1031,16 @@ def generar_excel_reporte(data: dict) -> bytes:
     sec_cli_data_start = ws.max_row + 1
 
     for label, qty, pct_val, fill in [
-        ("Activos",     rc["activos"],     rc["pct_activos"],     "F0FDF4"),
-        ("Suspendidos", rc["suspendidos"], rc["pct_suspendidos"], "FFF7ED"),
-        ("Cancelados",  rc["cancelados"],  rc["pct_cancelados"],  "FEF2F2"),
+        ("Activos",      rc["activos"],      rc["pct_activos"],      "F0FDF4"),
+        ("Suspendidos",  rc["suspendidos"],  rc["pct_suspendidos"],  "FFF7ED"),
+        ("Recolección",  rc["recoleccion"],  rc["pct_recoleccion"],  "EDE9FE"),
+        ("Cancelados",   rc["cancelados"],   rc["pct_cancelados"],   "FEF2F2"),
     ]:
         ws.append([label, qty, f"{pct_val}%"])
         for col in range(1, 4):
             ws.cell(row=ws.max_row, column=col).fill = PatternFill("solid", fgColor=fill)
 
-    total_estado = rc["activos"] + rc["suspendidos"] + rc["cancelados"]
+    total_estado = rc["activos"] + rc["suspendidos"] + rc["recoleccion"] + rc["cancelados"]
     pct_estado = round(total_estado / rc["total_real"] * 100, 1) if rc["total_real"] else 0
     tr = ws.max_row + 1
     ws.append(["TOTAL", total_estado, f"{pct_estado}%"])
@@ -1133,6 +1140,7 @@ def generar_pdf_reporte(data: dict) -> bytes:
     ALT_ROW   = colors.HexColor("#F1F5F9")
     NARANJA   = colors.HexColor("#D97706")
     ROJO      = colors.HexColor("#DC2626")
+    VIOLETA   = colors.HexColor("#7C3AED")
     GREEN_SHADES = [
         colors.HexColor("#15803D"), colors.HexColor("#22C55E"),
         colors.HexColor("#4ADE80"), colors.HexColor("#86EFAC"),
@@ -1194,7 +1202,7 @@ def generar_pdf_reporte(data: dict) -> bytes:
         key=lambda x: -x["total"],
     )
     rc = data["resumen_clientes"]
-    total_estado = rc["activos"] + rc["suspendidos"] + rc["cancelados"]
+    total_estado = rc["activos"] + rc["suspendidos"] + rc["recoleccion"] + rc["cancelados"]
     pct_estado = round(total_estado / rc["total_real"] * 100, 1) if rc["total_real"] else 0
 
     elems = []
@@ -1280,10 +1288,11 @@ def generar_pdf_reporte(data: dict) -> bytes:
 
     elems.append(Paragraph("Resumen de Clientes", section_style))
     cli_rows = [
-        ["Activos",     str(rc["activos"]),     f"{rc['pct_activos']}%"],
-        ["Suspendidos", str(rc["suspendidos"]),  f"{rc['pct_suspendidos']}%"],
-        ["Cancelados",  str(rc["cancelados"]),   f"{rc['pct_cancelados']}%"],
-        ["TOTAL",       str(total_estado),        f"{pct_estado}%"],
+        ["Activos",      str(rc["activos"]),      f"{rc['pct_activos']}%"],
+        ["Suspendidos",  str(rc["suspendidos"]),   f"{rc['pct_suspendidos']}%"],
+        ["Recolección",  str(rc["recoleccion"]),   f"{rc['pct_recoleccion']}%"],
+        ["Cancelados",   str(rc["cancelados"]),    f"{rc['pct_cancelados']}%"],
+        ["TOTAL",        str(total_estado),         f"{pct_estado}%"],
     ]
     cli_t = make_table(
         ["Estado del Servicio", "Clientes", "% del total"],
@@ -1391,6 +1400,7 @@ def generar_pdf_reporte(data: dict) -> bytes:
     rc_data = [
         (rc["activos"],     "Activos",     rc["pct_activos"],     GREEN),
         (rc["suspendidos"], "Suspendidos", rc["pct_suspendidos"], NARANJA),
+        (rc["recoleccion"], "Recolección", rc["pct_recoleccion"], VIOLETA),
         (rc["cancelados"],  "Cancelados",  rc["pct_cancelados"],  ROJO),
     ]
     visible = [(v, l, pct, c) for v, l, pct, c in rc_data if v > 0]

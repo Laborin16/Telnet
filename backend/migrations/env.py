@@ -12,6 +12,7 @@ from db.base import Base
 import modules.auth.models        # noqa: F401
 import modules.auditlog.models    # noqa: F401
 import modules.finanzas.models    # noqa: F401
+import modules.reportes.models    # noqa: F401
 
 config = context.config
 

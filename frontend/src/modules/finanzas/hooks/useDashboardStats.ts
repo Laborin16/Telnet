@@ -34,6 +34,7 @@ export interface DashboardStats {
   total: number;
   activos: number;
   suspendidos: number;
+  recoleccion: number;
   cancelados: number;
   mrrActivo: number;
   mrrSuspendido: number;
@@ -44,7 +45,7 @@ export interface DashboardStats {
   periodStats: { nuevasInstalaciones: number; cancelaciones: number; crecimientoNeto: number };
 }
 
-export function useDashboardStats(dateFrom: string | null, dateTo: string | null): DashboardStats {
+export function useDashboardStats(dateFrom: string | null, dateTo: string | null, recoleccionIds: Set<number> = new Set()): DashboardStats {
   const { data: clients, isLoading, isError } = useAllClients();
 
   return useMemo(() => {
@@ -54,6 +55,7 @@ export function useDashboardStats(dateFrom: string | null, dateTo: string | null
       total: 0,
       activos: 0,
       suspendidos: 0,
+      recoleccion: 0,
       cancelados: 0,
       mrrActivo: 0,
       mrrSuspendido: 0,
@@ -66,7 +68,7 @@ export function useDashboardStats(dateFrom: string | null, dateTo: string | null
 
     if (!clients) return empty;
 
-    let activos = 0, suspendidos = 0, cancelados = 0;
+    let activos = 0, suspendidos = 0, recoleccion = 0, cancelados = 0;
     let mrrActivo = 0, mrrSuspendido = 0;
     const riesgoCorte = { critico: 0, pendiente: 0 };
     const alertaBreakdown = { normal: 0, critico: 0, pendiente: 0, suspendido: 0 };
@@ -79,7 +81,11 @@ export function useDashboardStats(dateFrom: string | null, dateTo: string | null
         if (c.alerta_corte === "critico") riesgoCorte.critico++;
         if (c.alerta_corte === "pendiente") riesgoCorte.pendiente++;
       } else if (c.estado === "Suspendido") {
-        suspendidos++;
+        if (recoleccionIds.has(c.id_servicio)) {
+          recoleccion++;
+        } else {
+          suspendidos++;
+        }
         mrrSuspendido += c.precio_plan ?? 0;
       } else if (c.estado === "Cancelado") {
         cancelados++;
@@ -103,6 +109,7 @@ export function useDashboardStats(dateFrom: string | null, dateTo: string | null
       total: clients.length,
       activos,
       suspendidos,
+      recoleccion,
       cancelados,
       mrrActivo,
       mrrSuspendido,
@@ -116,5 +123,5 @@ export function useDashboardStats(dateFrom: string | null, dateTo: string | null
         crecimientoNeto: nuevasInstalaciones - cancelaciones,
       },
     };
-  }, [clients, isLoading, isError, dateFrom, dateTo]);
+  }, [clients, isLoading, isError, dateFrom, dateTo, recoleccionIds]);
 }

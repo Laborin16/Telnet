@@ -20,9 +20,10 @@ interface Props {
   clients: ClientItem[];
   onSelect: (id: number) => void;
   obsMap?: Record<number, string>;
+  recoleccionIds?: Set<number>;
 }
 
-export function ClientsTable({ clients, onSelect, obsMap }: Props) {
+export function ClientsTable({ clients, onSelect, obsMap, recoleccionIds }: Props) {
   const [hovered, setHovered] = useState<number | null>(null);
 
   if (clients.length === 0) {
@@ -73,7 +74,7 @@ export function ClientsTable({ clients, onSelect, obsMap }: Props) {
                   {client.zona?.nombre ?? <span style={{ color: "#cbd5e1" }}>—</span>}
                 </td>
                 <td style={{ ...td, textAlign: "center" }}>
-                  <ClientStatusBadge estado={client.estado} />
+                  <ClientStatusBadge estado={(recoleccionIds?.has(client.id_servicio) && client.estado === "Suspendido") ? "Recoleccion" : client.estado} />
                 </td>
                 <td style={{ ...td, textAlign: "center", color: "#64748b" }}>
                   {client.estado_facturas}

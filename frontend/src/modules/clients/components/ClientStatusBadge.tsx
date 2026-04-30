@@ -7,7 +7,15 @@ interface Props {
 const labelMap: Record<EstadoServicio, string> = {
   Activo: "Activo",
   Suspendido: "Suspendido",
+  Recoleccion: "Recolección",
   Cancelado: "Cancelado",
+};
+
+const colorMap: Record<EstadoServicio, string> = {
+  Activo: "#16a34a",
+  Suspendido: "#d97706",
+  Recoleccion: "#7c3aed",
+  Cancelado: "#dc2626",
 };
 
 export function ClientStatusBadge({ estado }: Props) {
@@ -17,7 +25,7 @@ export function ClientStatusBadge({ estado }: Props) {
       borderRadius: "12px",
       fontSize: "12px",
       fontWeight: 600,
-      backgroundColor: estado === "Activo" ? "#16a34a" : estado === "Suspendido" ? "#d97706" : "#dc2626",
+      backgroundColor: colorMap[estado],
       color: "white",
     }}>
       {labelMap[estado]}
