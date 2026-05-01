@@ -11,6 +11,9 @@ import { LoginPage } from "./modules/auth/pages/LoginPage";
 import { UsuariosPage } from "./modules/auth/pages/UsuariosPage";
 import { useObservaciones, useRecoleccion } from "./modules/finanzas/hooks/useCobranza";
 import { useAuth } from "./modules/auth/hooks/useAuth";
+import { TareasPage } from "./modules/reportes/pages/TareasPage";
+import { TareaDetailModal } from "./modules/reportes/components/TareaDetailModal";
+import { NuevaTareaModal } from "./modules/reportes/components/NuevaTareaModal";
 import apiClient from "./core/api/apiClient";
 
 type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "usuarios";
@@ -51,6 +54,8 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
   const [planFiltro, setPlanFiltro] = useState("");
   const [zonaFiltro, setZonaFiltro] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedTareaId, setSelectedTareaId] = useState<number | null>(null);
+  const [showNuevaTarea, setShowNuevaTarea] = useState(false);
   const [showChangePass, setShowChangePass] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -282,6 +287,12 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           )}
           {tab === "finanzas"  && <FinanzasPage />}
           {tab === "auditoria" && <AuditLogPage />}
+          {tab === "tareas" && (
+            <TareasPage
+              onSelectTarea={id => setSelectedTareaId(id)}
+              onNuevaTarea={() => setShowNuevaTarea(true)}
+            />
+          )}
 
           {tab === "clientes" && (
             <>
@@ -440,6 +451,12 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
       </div>
 
       {showChangePass && <ChangePasswordModal onClose={() => setShowChangePass(false)} />}
+      {selectedTareaId !== null && (
+        <TareaDetailModal tareaId={selectedTareaId} onClose={() => setSelectedTareaId(null)} />
+      )}
+      {showNuevaTarea && (
+        <NuevaTareaModal onClose={() => setShowNuevaTarea(false)} />
+      )}
     </div>
   );
 }
