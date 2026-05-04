@@ -2,11 +2,20 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../../../core/api/apiClient";
 
+type RolUsuario = "administrador" | "tecnico" | "cobranza";
+
+const ROL_META: Record<RolUsuario, { label: string; color: string; bg: string; border: string }> = {
+  administrador: { label: "Admin",    color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
+  cobranza:      { label: "Cobranza", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
+  tecnico:       { label: "Técnico",  color: "#64748b", bg: "#f8fafc", border: "#e2e8f0" },
+};
+
 interface UsuarioRow {
   id: number;
   username: string;
   nombre: string;
   activo: boolean;
+  rol: RolUsuario;
   es_admin: boolean;
   debe_cambiar_password: boolean;
 }
@@ -31,13 +40,13 @@ export function UsuariosPage() {
   });
 
   const actualizarMutation = useMutation({
-    mutationFn: async ({ id, ...body }: { id: number; activo?: boolean; es_admin?: boolean }) =>
+    mutationFn: async ({ id, ...body }: { id: number; activo?: boolean; rol?: RolUsuario }) =>
       (await apiClient.patch(`/api/v1/auth/usuarios/${id}`, body)).data,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["usuarios"] }),
   });
 
   const crearMutation = useMutation({
-    mutationFn: async (body: { username: string; nombre: string; es_admin: boolean }) =>
+    mutationFn: async (body: { username: string; nombre: string; rol: RolUsuario }) =>
       (await apiClient.post("/api/v1/auth/usuarios", body)).data,
     onSuccess: (data) => {
       setPasswordVisible({ nombre: data.nombre, username: data.username, password: data.password_temporal });
@@ -86,19 +95,10 @@ export function UsuariosPage() {
                   <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a" }}>{u.nombre}</td>
                   <td style={{ padding: "12px 16px", color: "#64748b", fontFamily: "monospace", fontSize: "12px" }}>{u.username}</td>
                   <td style={{ padding: "12px 16px" }}>
-                    <button
-                      onClick={() => actualizarMutation.mutate({ id: u.id, es_admin: !u.es_admin })}
-                      title="Clic para cambiar rol"
-                      style={{
-                        padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 600,
-                        cursor: "pointer",
-                        background: u.es_admin ? "#eff6ff" : "#f8fafc",
-                        color: u.es_admin ? "#1d4ed8" : "#64748b",
-                        border: `1px solid ${u.es_admin ? "#bfdbfe" : "#e2e8f0"}`,
-                      }}
-                    >
-                      {u.es_admin ? "Admin" : "Técnico"}
-                    </button>
+                    <RolSelector
+                      rol={u.rol ?? (u.es_admin ? "administrador" : "tecnico")}
+                      onChange={(nuevoRol) => actualizarMutation.mutate({ id: u.id, rol: nuevoRol })}
+                    />
                   </td>
                   <td style={{ padding: "12px 16px" }}>
                     <button
@@ -196,18 +196,18 @@ function NuevoUsuarioModal({
   onClose, onSubmit, isPending, error,
 }: {
   onClose: () => void;
-  onSubmit: (data: { username: string; nombre: string; es_admin: boolean }) => void;
+  onSubmit: (data: { username: string; nombre: string; rol: RolUsuario }) => void;
   isPending: boolean;
   error: string;
 }) {
   const [nombre, setNombre]     = useState("");
   const [username, setUsername] = useState("");
-  const [esAdmin, setEsAdmin]   = useState(false);
+  const [rol, setRol]           = useState<RolUsuario>("tecnico");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!nombre.trim() || !username.trim()) return;
-    onSubmit({ username: username.trim().toLowerCase(), nombre: nombre.trim(), es_admin: esAdmin });
+    onSubmit({ username: username.trim().toLowerCase(), nombre: nombre.trim(), rol });
   }
 
   return (
@@ -227,10 +227,7 @@ function NuevoUsuarioModal({
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label style={labelStyle}>Nombre completo</label>
-            <input
-              value={nombre} onChange={e => setNombre(e.target.value)}
-              placeholder="Ej. Juan Pérez" required style={inputStyle}
-            />
+            <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej. Juan Pérez" required style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>Usuario</label>
@@ -239,31 +236,25 @@ function NuevoUsuarioModal({
               onChange={e => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
               placeholder="Ej. jperez" required style={inputStyle}
             />
-            <p style={{ margin: "3px 0 0", fontSize: "11px", color: "#94a3b8" }}>
-              Solo letras, números y guiones. Se usará para iniciar sesión.
-            </p>
+            <p style={{ margin: "3px 0 0", fontSize: "11px", color: "#94a3b8" }}>Solo letras y números. Se usará para iniciar sesión.</p>
           </div>
           <div>
             <label style={labelStyle}>Rol</label>
             <div style={{ display: "flex", gap: "8px" }}>
-              {[
-                { value: false, label: "Técnico", color: "#64748b", bg: "#f8fafc", border: "#e2e8f0" },
-                { value: true,  label: "Admin",   color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
-              ].map(opt => {
-                const active = esAdmin === opt.value;
+              {(Object.entries(ROL_META) as [RolUsuario, typeof ROL_META[RolUsuario]][]).map(([value, meta]) => {
+                const active = rol === value;
                 return (
                   <button
-                    key={String(opt.value)} type="button"
-                    onClick={() => setEsAdmin(opt.value)}
+                    key={value} type="button" onClick={() => setRol(value)}
                     style={{
-                      flex: 1, padding: "8px", borderRadius: "7px", fontSize: "13px",
+                      flex: 1, padding: "8px", borderRadius: "7px", fontSize: "12px",
                       fontWeight: 600, cursor: "pointer",
-                      border: `1.5px solid ${active ? opt.border : "#e2e8f0"}`,
-                      color: active ? opt.color : "#94a3b8",
-                      background: active ? opt.bg : "white",
+                      border: `1.5px solid ${active ? meta.border : "#e2e8f0"}`,
+                      color: active ? meta.color : "#94a3b8",
+                      background: active ? meta.bg : "white",
                     }}
                   >
-                    {opt.label}
+                    {meta.label}
                   </button>
                 );
               })}
@@ -289,6 +280,48 @@ function NuevoUsuarioModal({
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ── Selector de rol inline ─────────────────────────────────────────────────────
+
+function RolSelector({ rol, onChange }: { rol: RolUsuario; onChange: (r: RolUsuario) => void }) {
+  const [open, setOpen] = useState(false);
+  const meta = ROL_META[rol] ?? ROL_META.tecnico;
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <button
+        onClick={() => setOpen(p => !p)}
+        style={{
+          padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 600,
+          cursor: "pointer", background: meta.bg, color: meta.color, border: `1px solid ${meta.border}`,
+        }}
+      >
+        {meta.label} ▾
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
+          background: "white", border: "1px solid #e2e8f0", borderRadius: "8px",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.1)", minWidth: "120px", overflow: "hidden",
+        }}>
+          {(Object.entries(ROL_META) as [RolUsuario, typeof ROL_META[RolUsuario]][]).map(([value, m]) => (
+            <button
+              key={value}
+              onClick={() => { onChange(value); setOpen(false); }}
+              style={{
+                width: "100%", padding: "8px 12px", textAlign: "left",
+                background: rol === value ? m.bg : "none", border: "none",
+                color: m.color, fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                borderBottom: "1px solid #f1f5f9",
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -25,12 +25,12 @@ class CambiarPasswordRequest(BaseModel):
 class CrearUsuarioRequest(BaseModel):
     username: str
     nombre: str
-    es_admin: bool = False
+    rol: str = "tecnico"
 
 
 class ActualizarUsuarioRequest(BaseModel):
     activo: bool | None = None
-    es_admin: bool | None = None
+    rol: str | None = None
     nombre: str | None = None
 
 
@@ -104,7 +104,7 @@ async def auth_crear_usuario(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido.")
     try:
-        return await crear_usuario(body.username, body.nombre, body.es_admin, db)
+        return await crear_usuario(body.username, body.nombre, body.rol, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -125,7 +125,7 @@ async def auth_actualizar_usuario(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido.")
     try:
-        return await actualizar_usuario(user_id, body.activo, body.es_admin, body.nombre, db)
+        return await actualizar_usuario(user_id, body.activo, body.rol, body.nombre, db)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

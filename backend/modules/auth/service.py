@@ -7,11 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from modules.auth.models import Usuario
+from modules.auth.models import Usuario, RolUsuario
 
 
 def generate_temp_password() -> str:
-    """Genera una contraseña temporal segura de 12 caracteres."""
     alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
     return "".join(secrets.choice(alphabet) for _ in range(12))
 
@@ -40,7 +39,8 @@ def create_token(user: Usuario) -> str:
         "nombre": user.nombre,
         "username": user.username,
         "wisphub_id": user.wisphub_id,
-        "es_admin": user.es_admin,
+        "rol": user.rol.value,
+        "es_admin": user.rol == RolUsuario.ADMINISTRADOR,  # compat con código existente
         "debe_cambiar_password": user.debe_cambiar_password,
         "exp": exp,
     }
@@ -48,7 +48,6 @@ def create_token(user: Usuario) -> str:
 
 
 def decode_token(token: str) -> dict:
-    """Lanza jwt.InvalidTokenError si el token es inválido o expirado."""
     return jwt.decode(token, settings.app_secret_key, algorithms=[_ALGORITHM])
 
 
@@ -63,7 +62,7 @@ async def login(username: str, password: str, db: AsyncSession) -> dict:
     if not user:
         raise ValueError("Usuario no encontrado o inactivo.")
     if not user.password_hash:
-        raise ValueError("Este usuario aún no tiene contraseña configurada. Pide al administrador que sincronice los usuarios.")
+        raise ValueError("Este usuario no tiene contraseña configurada.")
     if not verify_password(password, user.password_hash):
         raise ValueError("Contraseña incorrecta.")
 
@@ -73,9 +72,9 @@ async def login(username: str, password: str, db: AsyncSession) -> dict:
         "token_type": "bearer",
         "user": {
             "id": user.id,
-            "wisphub_id": user.wisphub_id,
             "username": user.username,
             "nombre": user.nombre,
+            "rol": user.rol.value,
             "es_admin": user.es_admin,
             "debe_cambiar_password": user.debe_cambiar_password,
         },
@@ -100,11 +99,15 @@ async def cambiar_password(user_id: int, password_actual: str, password_nuevo: s
     return create_token(user)
 
 
-async def crear_usuario(username: str, nombre: str, es_admin: bool, db: AsyncSession) -> dict:
+async def crear_usuario(username: str, nombre: str, rol: str, db: AsyncSession) -> dict:
     username = username.strip().lower()
     nombre = nombre.strip()
     if not username or not nombre:
         raise ValueError("El nombre y el usuario son obligatorios.")
+    try:
+        rol_enum = RolUsuario(rol)
+    except ValueError:
+        raise ValueError(f"Rol inválido: {rol}. Opciones: administrador, tecnico, cobranza.")
 
     existing = await db.execute(select(Usuario).where(Usuario.username == username))
     if existing.scalar_one_or_none():
@@ -115,7 +118,7 @@ async def crear_usuario(username: str, nombre: str, es_admin: bool, db: AsyncSes
         username=username,
         nombre=nombre,
         password_hash=hash_password(temp_pw),
-        es_admin=es_admin,
+        rol=rol_enum,
         activo=True,
         debe_cambiar_password=True,
     )
@@ -124,42 +127,30 @@ async def crear_usuario(username: str, nombre: str, es_admin: bool, db: AsyncSes
     return {"username": user.username, "nombre": user.nombre, "password_temporal": temp_pw}
 
 
-async def actualizar_usuario(user_id: int, activo: bool | None, es_admin: bool | None, nombre: str | None, db: AsyncSession) -> dict:
+async def actualizar_usuario(user_id: int, activo: bool | None, rol: str | None, nombre: str | None, db: AsyncSession) -> dict:
     result = await db.execute(select(Usuario).where(Usuario.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise ValueError("Usuario no encontrado.")
     if activo is not None:
         user.activo = activo
-    if es_admin is not None:
-        user.es_admin = es_admin
+    if rol is not None:
+        try:
+            user.rol = RolUsuario(rol)
+        except ValueError:
+            raise ValueError(f"Rol inválido: {rol}.")
     if nombre is not None:
         nombre = nombre.strip()
         if nombre:
             user.nombre = nombre
     user.updated_at = datetime.now()
     await db.commit()
-    return {
-        "id": user.id, "username": user.username, "nombre": user.nombre,
-        "activo": user.activo, "es_admin": user.es_admin,
-        "debe_cambiar_password": user.debe_cambiar_password,
-    }
+    return _usuario_dict(user)
 
 
 async def get_usuarios(db: AsyncSession) -> list:
     result = await db.execute(select(Usuario).order_by(Usuario.nombre))
-    return [
-        {
-            "id": u.id,
-            "wisphub_id": u.wisphub_id,
-            "username": u.username,
-            "nombre": u.nombre,
-            "activo": u.activo,
-            "es_admin": u.es_admin,
-            "debe_cambiar_password": u.debe_cambiar_password,
-        }
-        for u in result.scalars().all()
-    ]
+    return [_usuario_dict(u) for u in result.scalars().all()]
 
 
 async def reset_password(user_id: int, db: AsyncSession) -> dict:
@@ -173,3 +164,15 @@ async def reset_password(user_id: int, db: AsyncSession) -> dict:
     user.updated_at = datetime.now()
     await db.commit()
     return {"username": user.username, "nombre": user.nombre, "password_temporal": temp_pw}
+
+
+def _usuario_dict(u: Usuario) -> dict:
+    return {
+        "id": u.id,
+        "username": u.username,
+        "nombre": u.nombre,
+        "activo": u.activo,
+        "rol": u.rol.value,
+        "es_admin": u.es_admin,
+        "debe_cambiar_password": u.debe_cambiar_password,
+    }

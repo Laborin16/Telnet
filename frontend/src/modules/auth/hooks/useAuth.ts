@@ -1,10 +1,13 @@
 import { useState, useMemo } from "react";
 
+export type RolUsuario = "administrador" | "tecnico" | "cobranza";
+
 export interface AuthUser {
   id: number;
   wisphub_id: number | null;
   username: string;
   nombre: string;
+  rol: RolUsuario;
   es_admin: boolean;
   debe_cambiar_password: boolean;
 }
@@ -19,6 +22,7 @@ function decodeToken(token: string): (AuthUser & { exp: number }) | null {
       wisphub_id: payload.wisphub_id ?? null,
       username: payload.username ?? "",
       nombre: payload.nombre ?? "",
+      rol: (payload.rol ?? "tecnico") as RolUsuario,
       es_admin: payload.es_admin ?? false,
       debe_cambiar_password: payload.debe_cambiar_password ?? false,
       exp: payload.exp ?? 0,

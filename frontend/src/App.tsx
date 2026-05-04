@@ -21,16 +21,17 @@ import { usePushSubscription } from "./modules/reportes/hooks/usePushSubscriptio
 import apiClient from "./core/api/apiClient";
 
 type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "usuarios";
+type RolUsuario = "administrador" | "tecnico" | "cobranza";
 const PAGE_SIZE = 25;
 const ALERTA_ORDER: Record<string, number> = { critico: 0, pendiente: 1, suspendido: 2, normal: 3 };
 
-const NAV_ITEMS: { key: Tab; label: string; icon: string; adminOnly?: boolean }[] = [
-  { key: "clientes",  label: "Clientes",  icon: "👥" },
-  { key: "dashboard", label: "Dashboard", icon: "📊" },
-  { key: "finanzas",  label: "Finanzas",  icon: "💰" },
-  { key: "auditoria", label: "Auditoría", icon: "📋" },
-  { key: "tareas",    label: "Tareas",    icon: ""},
-  { key: "usuarios",  label: "Usuarios",  icon: "🔑", adminOnly: true },
+const NAV_ITEMS: { key: Tab; label: string; icon: string; roles: RolUsuario[] }[] = [
+  { key: "clientes",  label: "Clientes",  icon: "👥", roles: ["administrador", "cobranza"] },
+  { key: "dashboard", label: "Dashboard", icon: "📊", roles: ["administrador", "cobranza"] },
+  { key: "finanzas",  label: "Finanzas",  icon: "💰", roles: ["administrador", "cobranza"] },
+  { key: "auditoria", label: "Auditoría", icon: "📋", roles: ["administrador"] },
+  { key: "tareas",    label: "Tareas",    icon: "",   roles: ["administrador", "tecnico"] },
+  { key: "usuarios",  label: "Usuarios",  icon: "🔑", roles: ["administrador"] },
 ];
 
 export default function App() {
@@ -47,7 +48,9 @@ export default function App() {
 // ── Aplicación principal (solo se monta si autenticado) ──────────────────────
 
 function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth>["user"]>; logout: () => void }) {
-  const [tab, setTab]       = useState<Tab>("clientes");
+  const userRol = (user.rol ?? (user.es_admin ? "administrador" : "tecnico")) as RolUsuario;
+  const defaultTab: Tab = userRol === "tecnico" ? "tareas" : "clientes";
+  const [tab, setTab]       = useState<Tab>(defaultTab);
   const [page, setPage]     = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<Set<string>>(new Set());
@@ -181,7 +184,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           <p style={{ margin: "0 0 8px 8px", fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em" }}>
             Módulos
           </p>
-          {NAV_ITEMS.filter(i => !i.adminOnly || user.es_admin).map(({ key, label, icon }) => {
+          {NAV_ITEMS.filter(i => i.roles.includes(userRol)).map(({ key, label, icon }) => {
             const active = tab === key;
             const badge = key === "tareas" && alertaCount > 0 ? alertaCount : 0;
             return (
