@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.dependencies import get_usuario
@@ -7,8 +7,11 @@ from modules.reportes import service
 from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
 from modules.reportes.schemas import (
     AsignarTecnico,
+    EliminarSuscripcionPush,
+    SuscripcionPushCreate,
     TareaCreate,
     TareaEventoResponse,
+    TareaFotoResponse,
     TareaResponse,
     TareaUpdate,
     TransicionEstado,
@@ -37,11 +40,12 @@ async def listar_tareas(
     estado: EstadoTarea | None = Query(None),
     tipo: TipoTarea | None = Query(None),
     prioridad: PrioridadTarea | None = Query(None),
+    tecnico_id: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
     _requerir_autenticado(usuario)
-    return await service.listar_tareas(usuario, db, estado=estado, tipo=tipo, prioridad=prioridad)
+    return await service.listar_tareas(usuario, db, estado=estado, tipo=tipo, prioridad=prioridad, tecnico_id=tecnico_id)
 
 
 @router.get("/tareas/{tarea_id}", response_model=TareaResponse)
@@ -134,6 +138,61 @@ async def listar_eventos(
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.post("/tareas/{tarea_id}/fotos", response_model=TareaFotoResponse, status_code=201)
+async def subir_foto(
+    tarea_id: int,
+    archivo: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    _requerir_autenticado(usuario)
+    contenido = await archivo.read()
+    if len(contenido) > 10 * 1024 * 1024:  # 10 MB
+        raise HTTPException(status_code=413, detail="El archivo supera el límite de 10 MB")
+    try:
+        return await service.subir_foto(tarea_id, archivo.filename or "foto.jpg", contenido, usuario, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.get("/tareas/{tarea_id}/fotos", response_model=list[TareaFotoResponse])
+async def listar_fotos(
+    tarea_id: int,
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    _requerir_autenticado(usuario)
+    try:
+        return await service.listar_fotos(tarea_id, usuario, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.post("/push/suscribir", status_code=201)
+async def registrar_push(
+    datos: SuscripcionPushCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    _requerir_autenticado(usuario)
+    await service.registrar_suscripcion(datos, usuario, db)
+    return {"ok": True}
+
+
+@router.delete("/push/suscribir", status_code=204)
+async def eliminar_push(
+    datos: EliminarSuscripcionPush,
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    _requerir_autenticado(usuario)
+    await service.eliminar_suscripcion(datos.endpoint, usuario, db)
 
 
 # ── Helpers de autorización ───────────────────────────────────────────────────

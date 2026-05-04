@@ -5,6 +5,7 @@ import type {
   TareaCreate,
   TareaEvento,
   TareaFiltros,
+  TareaFoto,
   TareaUpdate,
   TransicionEstado,
 } from "../types/reportes";
@@ -51,5 +52,19 @@ export async function asignarTecnico(id: number, datos: AsignarTecnico): Promise
 
 export async function transicionarEstado(id: number, datos: TransicionEstado): Promise<Tarea> {
   const { data } = await apiClient.post(`${BASE}/tareas/${id}/transicion`, datos);
+  return data;
+}
+
+export async function fetchFotos(id: number): Promise<TareaFoto[]> {
+  const { data } = await apiClient.get(`${BASE}/tareas/${id}/fotos`);
+  return data;
+}
+
+export async function subirFoto(id: number, archivo: File): Promise<TareaFoto> {
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+  const { data } = await apiClient.post(`${BASE}/tareas/${id}/fotos`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return data;
 }

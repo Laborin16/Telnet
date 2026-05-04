@@ -67,6 +67,7 @@ class TareaResponse(BaseModel):
     latitud: float | None
     longitud: float | None
     fecha_creada: datetime
+    fecha_limite: datetime | None
     fecha_asignada: datetime | None
     fecha_iniciada: datetime | None
     fecha_completada: datetime | None
@@ -86,5 +87,27 @@ class TareaEventoResponse(BaseModel):
     comentario: str | None
     lat_evento: float | None
     lng_evento: float | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SuscripcionPushCreate(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+    user_agent: str = ""
+
+
+class EliminarSuscripcionPush(BaseModel):
+    endpoint: str
+
+
+class TareaFotoResponse(BaseModel):
+    id: int
+    tarea_id: int
+    ruta: str
+    nombre_original: str
+    subido_por_nombre: str
+    timestamp: datetime
 
     model_config = ConfigDict(from_attributes=True)

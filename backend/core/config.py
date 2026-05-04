@@ -29,4 +29,9 @@ class Settings(BaseSettings):
     whatsapp_business_account_id: str = ""
     whatsapp_contact_phone: str = ""
 
+    # VAPID (Web Push)
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    vapid_subject: str = "mailto:admin@telnet-hillo.com"
+
 settings = Settings()

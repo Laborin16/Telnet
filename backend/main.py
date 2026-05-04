@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from core.config import settings
 from core.wisphub.client import wisphub_client
 from modules.clients.router import router as clients_router
@@ -10,6 +11,7 @@ from modules.finanzas.router import router as finanzas_router
 from modules.auditlog.router import router as audit_router
 from modules.auth.router import router as auth_router
 from modules.reportes.routes import router as reportes_router
+from modules.reportes.notificaciones import job_alertas_sla
 from db.session import engine
 from db.base import Base
 import modules.finanzas.models   # noqa: F401
@@ -17,12 +19,17 @@ import modules.auditlog.models   # noqa: F401
 import modules.auth.models       # noqa: F401 — registers Usuario with Base
 import modules.reportes.models   # noqa: F401
 
+scheduler = AsyncIOScheduler(timezone="America/Hermosillo")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    scheduler.add_job(job_alertas_sla, "interval", minutes=15, id="alertas_sla")
+    scheduler.start()
     yield
+    scheduler.shutdown(wait=False)
     await wisphub_client.close()
 
 
@@ -41,6 +48,7 @@ app.add_middleware(
 )
 
 app.mount("/static/comprobantes", StaticFiles(directory="data/comprobantes"), name="comprobantes")
+app.mount("/media", StaticFiles(directory="media"), name="media")
 app.include_router(clients_router, prefix="/api/v1/clients", tags=["clients"])
 app.include_router(whatsapp_router, prefix="/api/v1/whatsapp", tags=["whatsapp"])
 app.include_router(finanzas_router, prefix="/api/v1/finanzas", tags=["finanzas"])

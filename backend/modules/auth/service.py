@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from core.wisphub.client import wisphub_client
 from modules.auth.models import Usuario
 
 
@@ -101,54 +100,49 @@ async def cambiar_password(user_id: int, password_actual: str, password_nuevo: s
     return create_token(user)
 
 
-async def sync_usuarios_from_wisphub(db: AsyncSession) -> dict:
-    """
-    Sincroniza usuarios del staff de WispHub a la tabla local.
-    Si el usuario no existe → lo crea con contraseña inicial = su username.
-    Si ya existe → actualiza nombre pero NO toca la contraseña.
-    """
-    data = await wisphub_client.get("/api/staff/", params={"page_size": 100})
-    staff = data.get("results", [])
+async def crear_usuario(username: str, nombre: str, es_admin: bool, db: AsyncSession) -> dict:
+    username = username.strip().lower()
+    nombre = nombre.strip()
+    if not username or not nombre:
+        raise ValueError("El nombre y el usuario son obligatorios.")
 
-    creados = 0
-    actualizados = 0
-    passwords_temporales: list[dict] = []
+    existing = await db.execute(select(Usuario).where(Usuario.username == username))
+    if existing.scalar_one_or_none():
+        raise ValueError(f"El usuario '{username}' ya está registrado.")
 
-    for s in staff:
-        wisphub_id = s.get("id")
-        username = (s.get("username") or str(wisphub_id) or "").strip().lower()
-        nombre = (s.get("nombre") or s.get("username") or "").strip()
-        if not username:
-            continue
+    temp_pw = generate_temp_password()
+    user = Usuario(
+        username=username,
+        nombre=nombre,
+        password_hash=hash_password(temp_pw),
+        es_admin=es_admin,
+        activo=True,
+        debe_cambiar_password=True,
+    )
+    db.add(user)
+    await db.commit()
+    return {"username": user.username, "nombre": user.nombre, "password_temporal": temp_pw}
 
-        result = await db.execute(
-            select(Usuario).where(Usuario.wisphub_id == wisphub_id)
-        )
-        existing = result.scalar_one_or_none()
 
-        if existing is None:
-            temp_pw = generate_temp_password()
-            db.add(Usuario(
-                wisphub_id=wisphub_id,
-                username=username,
-                nombre=nombre or username,
-                password_hash=hash_password(temp_pw),
-                activo=True,
-                debe_cambiar_password=True,
-            ))
-            passwords_temporales.append({"username": username, "nombre": nombre, "password_temporal": temp_pw})
-            creados += 1
-        else:
-            existing.nombre = nombre or existing.nombre
-            existing.updated_at = datetime.now()
-            actualizados += 1
-
+async def actualizar_usuario(user_id: int, activo: bool | None, es_admin: bool | None, nombre: str | None, db: AsyncSession) -> dict:
+    result = await db.execute(select(Usuario).where(Usuario.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise ValueError("Usuario no encontrado.")
+    if activo is not None:
+        user.activo = activo
+    if es_admin is not None:
+        user.es_admin = es_admin
+    if nombre is not None:
+        nombre = nombre.strip()
+        if nombre:
+            user.nombre = nombre
+    user.updated_at = datetime.now()
     await db.commit()
     return {
-        "creados": creados,
-        "actualizados": actualizados,
-        "total": len(staff),
-        "passwords_temporales": passwords_temporales,
+        "id": user.id, "username": user.username, "nombre": user.nombre,
+        "activo": user.activo, "es_admin": user.es_admin,
+        "debe_cambiar_password": user.debe_cambiar_password,
     }
 
 

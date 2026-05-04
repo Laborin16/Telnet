@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
 from modules.auth.service import (
-    login, cambiar_password, sync_usuarios_from_wisphub,
+    login, cambiar_password, crear_usuario, actualizar_usuario,
     get_usuarios, reset_password, decode_token,
 )
 import jwt
@@ -20,6 +20,18 @@ class LoginRequest(BaseModel):
 class CambiarPasswordRequest(BaseModel):
     password_actual: str
     password_nuevo: str
+
+
+class CrearUsuarioRequest(BaseModel):
+    username: str
+    nombre: str
+    es_admin: bool = False
+
+
+class ActualizarUsuarioRequest(BaseModel):
+    activo: bool | None = None
+    es_admin: bool | None = None
+    nombre: str | None = None
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -72,21 +84,50 @@ async def auth_cambiar_password(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/sync-usuarios")
-async def auth_sync_usuarios(db: AsyncSession = Depends(get_db)):
-    """
-    Sincroniza usuarios del staff de WispHub.
-    Contraseña inicial de cada usuario nuevo = su nombre de usuario.
-    """
-    try:
-        return await sync_usuarios_from_wisphub(db)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al sincronizar: {e}")
-
-
 @router.get("/usuarios")
 async def auth_usuarios(db: AsyncSession = Depends(get_db)):
     return await get_usuarios(db)
+
+
+@router.post("/usuarios", status_code=201)
+async def auth_crear_usuario(
+    body: CrearUsuarioRequest,
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="No autenticado.")
+    try:
+        payload = decode_token(authorization[7:])
+        if not payload.get("es_admin"):
+            raise HTTPException(status_code=403, detail="Solo los administradores pueden crear usuarios.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido.")
+    try:
+        return await crear_usuario(body.username, body.nombre, body.es_admin, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/usuarios/{user_id}")
+async def auth_actualizar_usuario(
+    user_id: int,
+    body: ActualizarUsuarioRequest,
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="No autenticado.")
+    try:
+        payload = decode_token(authorization[7:])
+        if not payload.get("es_admin"):
+            raise HTTPException(status_code=403, detail="Solo los administradores pueden modificar usuarios.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido.")
+    try:
+        return await actualizar_usuario(user_id, body.activo, body.es_admin, body.nombre, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/reset-password/{user_id}")

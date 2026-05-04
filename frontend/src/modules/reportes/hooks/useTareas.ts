@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchEventos,
+  fetchFotos,
   fetchTarea,
   fetchTareas,
   fetchTransicionesValidas,
@@ -40,6 +41,15 @@ export function useTareaEventos(id: number | null) {
   return useQuery({
     queryKey: ["tarea-eventos", id],
     queryFn: () => fetchEventos(id!),
+    enabled: id !== null,
+    staleTime: 30_000,
+  });
+}
+
+export function useTareaFotos(id: number | null) {
+  return useQuery({
+    queryKey: ["tarea-fotos", id],
+    queryFn: () => fetchFotos(id!),
     enabled: id !== null,
     staleTime: 30_000,
   });

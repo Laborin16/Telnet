@@ -14,6 +14,10 @@ import { useAuth } from "./modules/auth/hooks/useAuth";
 import { TareasPage } from "./modules/reportes/pages/TareasPage";
 import { TareaDetailModal } from "./modules/reportes/components/TareaDetailModal";
 import { NuevaTareaModal } from "./modules/reportes/components/NuevaTareaModal";
+import { useTareas } from "./modules/reportes/hooks/useTareas";
+import { calcularSLA } from "./modules/reportes/utils/sla";
+import { ToastProvider } from "./shared/components/ToastProvider";
+import { usePushSubscription } from "./modules/reportes/hooks/usePushSubscription";
 import apiClient from "./core/api/apiClient";
 
 type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "usuarios";
@@ -31,16 +35,13 @@ const NAV_ITEMS: { key: Tab; label: string; icon: string; adminOnly?: boolean }[
 
 export default function App() {
   const { user, isAuthenticated, login, logout } = useAuth();
-
-  if (!isAuthenticated) {
-    return <LoginPage onLogin={login} />;
-  }
-
-  if (user!.debe_cambiar_password) {
-    return <ForzarCambioPassword onChanged={login} />;
-  }
-
-  return <MainApp user={user!} logout={logout} />;
+  return (
+    <ToastProvider>
+      {!isAuthenticated ? <LoginPage onLogin={login} /> :
+       user!.debe_cambiar_password ? <ForzarCambioPassword onChanged={login} /> :
+       <MainApp user={user!} logout={logout} />}
+    </ToastProvider>
+  );
 }
 
 // ── Aplicación principal (solo se monta si autenticado) ──────────────────────
@@ -57,6 +58,13 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
   const [selectedTareaId, setSelectedTareaId] = useState<number | null>(null);
   const [showNuevaTarea, setShowNuevaTarea] = useState(false);
   const [showChangePass, setShowChangePass] = useState(false);
+
+  usePushSubscription();
+
+  const { data: tareasAlerta } = useTareas({});
+  const alertaCount = (tareasAlerta ?? []).filter(t =>
+    t.estado === "BLOQUEADO" || calcularSLA(t.tipo, t.estado, t.fecha_creada).vencida
+  ).length;
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -175,6 +183,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           </p>
           {NAV_ITEMS.filter(i => !i.adminOnly || user.es_admin).map(({ key, label, icon }) => {
             const active = tab === key;
+            const badge = key === "tareas" && alertaCount > 0 ? alertaCount : 0;
             return (
               <button key={key} onClick={() => { setTab(key); if (isMobile) setSidebarOpen(false); }} style={{
                 display: "flex", alignItems: "center", gap: "9px",
@@ -183,10 +192,21 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                 fontSize: "13.5px", fontWeight: active ? 600 : 400,
                 color: active ? "#f1f5f9" : "#94a3b8",
                 background: active ? "rgba(59,130,246,0.18)" : "transparent",
-                textAlign: "left",
+                textAlign: "left", position: "relative",
               }}>
                 <span style={{ fontSize: "15px", lineHeight: 1 }}>{icon}</span>
-                {label}
+                <span style={{ flex: 1 }}>{label}</span>
+                {badge > 0 && (
+                  <span style={{
+                    minWidth: "18px", height: "18px", borderRadius: "9px",
+                    background: "#dc2626", color: "white",
+                    fontSize: "10px", fontWeight: 700, lineHeight: "18px",
+                    textAlign: "center", padding: "0 5px",
+                    flexShrink: 0,
+                  }}>
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
               </button>
             );
           })}

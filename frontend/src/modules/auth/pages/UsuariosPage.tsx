@@ -11,17 +11,10 @@ interface UsuarioRow {
   debe_cambiar_password: boolean;
 }
 
-interface SyncResult {
-  creados: number;
-  actualizados: number;
-  total: number;
-  passwords_temporales: { username: string; nombre: string; password_temporal: string }[];
-}
-
 export function UsuariosPage() {
   const queryClient = useQueryClient();
   const [passwordVisible, setPasswordVisible] = useState<{ nombre: string; username: string; password: string } | null>(null);
-  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [showNuevoForm, setShowNuevoForm] = useState(false);
 
   const { data: usuarios = [], isLoading } = useQuery<UsuarioRow[]>({
     queryKey: ["usuarios"],
@@ -37,10 +30,18 @@ export function UsuariosPage() {
     },
   });
 
-  const syncMutation = useMutation({
-    mutationFn: async () => (await apiClient.post("/api/v1/auth/sync-usuarios")).data,
-    onSuccess: (data: SyncResult) => {
-      setSyncResult(data);
+  const actualizarMutation = useMutation({
+    mutationFn: async ({ id, ...body }: { id: number; activo?: boolean; es_admin?: boolean }) =>
+      (await apiClient.patch(`/api/v1/auth/usuarios/${id}`, body)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["usuarios"] }),
+  });
+
+  const crearMutation = useMutation({
+    mutationFn: async (body: { username: string; nombre: string; es_admin: boolean }) =>
+      (await apiClient.post("/api/v1/auth/usuarios", body)).data,
+    onSuccess: (data) => {
+      setPasswordVisible({ nombre: data.nombre, username: data.username, password: data.password_temporal });
+      setShowNuevoForm(false);
       queryClient.invalidateQueries({ queryKey: ["usuarios"] });
     },
   });
@@ -54,45 +55,15 @@ export function UsuariosPage() {
           <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>{usuarios.length} usuarios registrados</p>
         </div>
         <button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
+          onClick={() => setShowNuevoForm(true)}
           style={{
             padding: "8px 16px", borderRadius: "7px", border: "none", cursor: "pointer",
-            background: syncMutation.isPending ? "#cbd5e1" : "#0f172a",
-            color: "white", fontSize: "13px", fontWeight: 600,
+            background: "#2563eb", color: "white", fontSize: "13px", fontWeight: 600,
           }}
         >
-          {syncMutation.isPending ? "Sincronizando..." : "Sincronizar desde WispHub"}
+          + Nuevo usuario
         </button>
       </div>
-
-      {/* Resultado de sincronización */}
-      {syncResult && (
-        <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: "8px", padding: "12px 16px", marginBottom: "14px" }}>
-          <p style={{ margin: "0 0 4px", fontSize: "13px", fontWeight: 600, color: "#15803d" }}>
-            Sincronización completada — {syncResult.creados} creados, {syncResult.actualizados} actualizados
-          </p>
-          {syncResult.passwords_temporales.length > 0 && (
-            <div style={{ marginTop: "10px" }}>
-              <p style={{ margin: "0 0 6px", fontSize: "12px", fontWeight: 600, color: "#166534" }}>
-                Contraseñas temporales de usuarios nuevos:
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                {syncResult.passwords_temporales.map(u => (
-                  <div key={u.username} style={{ display: "flex", gap: "12px", fontSize: "12px", fontFamily: "monospace", background: "white", padding: "6px 10px", borderRadius: "5px", border: "1px solid #bbf7d0" }}>
-                    <span style={{ color: "#166534", fontWeight: 700, minWidth: "140px" }}>{u.nombre}</span>
-                    <span style={{ color: "#64748b" }}>{u.username}</span>
-                    <span style={{ color: "#0f172a", fontWeight: 700 }}>{u.password_temporal}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <button onClick={() => setSyncResult(null)} style={{ marginTop: "8px", background: "none", border: "none", fontSize: "11px", color: "#86efac", cursor: "pointer" }}>
-            Cerrar
-          </button>
-        </div>
-      )}
 
       {/* Tabla */}
       <div style={{ background: "white", borderRadius: "10px", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
@@ -111,28 +82,38 @@ export function UsuariosPage() {
             </thead>
             <tbody>
               {usuarios.map(u => (
-                <tr key={u.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <tr key={u.id} style={{ borderBottom: "1px solid #f1f5f9", opacity: u.activo ? 1 : 0.55 }}>
                   <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a" }}>{u.nombre}</td>
                   <td style={{ padding: "12px 16px", color: "#64748b", fontFamily: "monospace", fontSize: "12px" }}>{u.username}</td>
                   <td style={{ padding: "12px 16px" }}>
-                    <span style={{
-                      padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 600,
-                      background: u.es_admin ? "#eff6ff" : "#f8fafc",
-                      color: u.es_admin ? "#1d4ed8" : "#64748b",
-                      border: `1px solid ${u.es_admin ? "#bfdbfe" : "#e2e8f0"}`,
-                    }}>
-                      {u.es_admin ? "Admin" : "Usuario"}
-                    </span>
+                    <button
+                      onClick={() => actualizarMutation.mutate({ id: u.id, es_admin: !u.es_admin })}
+                      title="Clic para cambiar rol"
+                      style={{
+                        padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 600,
+                        cursor: "pointer",
+                        background: u.es_admin ? "#eff6ff" : "#f8fafc",
+                        color: u.es_admin ? "#1d4ed8" : "#64748b",
+                        border: `1px solid ${u.es_admin ? "#bfdbfe" : "#e2e8f0"}`,
+                      }}
+                    >
+                      {u.es_admin ? "Admin" : "Técnico"}
+                    </button>
                   </td>
                   <td style={{ padding: "12px 16px" }}>
-                    <span style={{
-                      padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 600,
-                      background: u.activo ? "#f0fdf4" : "#fef2f2",
-                      color: u.activo ? "#16a34a" : "#dc2626",
-                      border: `1px solid ${u.activo ? "#bbf7d0" : "#fecaca"}`,
-                    }}>
+                    <button
+                      onClick={() => actualizarMutation.mutate({ id: u.id, activo: !u.activo })}
+                      title="Clic para activar/desactivar"
+                      style={{
+                        padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 600,
+                        cursor: "pointer",
+                        background: u.activo ? "#f0fdf4" : "#fef2f2",
+                        color: u.activo ? "#16a34a" : "#dc2626",
+                        border: `1px solid ${u.activo ? "#bbf7d0" : "#fecaca"}`,
+                      }}
+                    >
                       {u.activo ? "Activo" : "Inactivo"}
-                    </span>
+                    </button>
                   </td>
                   <td style={{ padding: "12px 16px" }}>
                     {u.debe_cambiar_password
@@ -148,7 +129,7 @@ export function UsuariosPage() {
                         border: "1px solid #fecaca", background: "#fef2f2", color: "#dc2626",
                       }}
                     >
-                      Resetear contraseña
+                      Resetear clave
                     </button>
                   </td>
                 </tr>
@@ -158,15 +139,27 @@ export function UsuariosPage() {
         )}
       </div>
 
-      {/* Modal con contraseña generada */}
+      {/* Modal nuevo usuario */}
+      {showNuevoForm && (
+        <NuevoUsuarioModal
+          onClose={() => setShowNuevoForm(false)}
+          onSubmit={(data) => crearMutation.mutate(data)}
+          isPending={crearMutation.isPending}
+          error={crearMutation.error ? String((crearMutation.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Error al crear usuario.") : ""}
+        />
+      )}
+
+      {/* Modal contraseña generada */}
       {passwordVisible && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ background: "white", borderRadius: "12px", padding: "32px", width: "380px", maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", textAlign: "center" }}>
             <div style={{ fontSize: "36px", marginBottom: "12px" }}>🔑</div>
-            <h3 style={{ margin: "0 0 6px", fontSize: "17px", fontWeight: 700, color: "#0f172a" }}>Contraseña restablecida</h3>
+            <h3 style={{ margin: "0 0 6px", fontSize: "17px", fontWeight: 700, color: "#0f172a" }}>
+              {resetMutation.isSuccess ? "Contraseña restablecida" : "Usuario creado"}
+            </h3>
             <p style={{ margin: "0 0 20px", fontSize: "13px", color: "#64748b" }}>
               Comparte esta contraseña temporal con <strong>{passwordVisible.nombre}</strong>.<br />
-              El usuario deberá cambiarla al iniciar sesión.
+              Deberá cambiarla al iniciar sesión.
             </p>
             <div style={{ background: "#f8fafc", border: "2px dashed #cbd5e1", borderRadius: "8px", padding: "14px", marginBottom: "20px" }}>
               <p style={{ margin: "0 0 4px", fontSize: "11px", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase" }}>
@@ -196,3 +189,119 @@ export function UsuariosPage() {
     </div>
   );
 }
+
+// ── Modal nuevo usuario ────────────────────────────────────────────────────────
+
+function NuevoUsuarioModal({
+  onClose, onSubmit, isPending, error,
+}: {
+  onClose: () => void;
+  onSubmit: (data: { username: string; nombre: string; es_admin: boolean }) => void;
+  isPending: boolean;
+  error: string;
+}) {
+  const [nombre, setNombre]     = useState("");
+  const [username, setUsername] = useState("");
+  const [esAdmin, setEsAdmin]   = useState(false);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nombre.trim() || !username.trim()) return;
+    onSubmit({ username: username.trim().toLowerCase(), nombre: nombre.trim(), es_admin: esAdmin });
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: "white", borderRadius: "12px", padding: "28px", width: "400px", maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Nuevo usuario</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "#94a3b8" }}>✕</button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div>
+            <label style={labelStyle}>Nombre completo</label>
+            <input
+              value={nombre} onChange={e => setNombre(e.target.value)}
+              placeholder="Ej. Juan Pérez" required style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Usuario</label>
+            <input
+              value={username}
+              onChange={e => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
+              placeholder="Ej. jperez" required style={inputStyle}
+            />
+            <p style={{ margin: "3px 0 0", fontSize: "11px", color: "#94a3b8" }}>
+              Solo letras, números y guiones. Se usará para iniciar sesión.
+            </p>
+          </div>
+          <div>
+            <label style={labelStyle}>Rol</label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {[
+                { value: false, label: "Técnico", color: "#64748b", bg: "#f8fafc", border: "#e2e8f0" },
+                { value: true,  label: "Admin",   color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
+              ].map(opt => {
+                const active = esAdmin === opt.value;
+                return (
+                  <button
+                    key={String(opt.value)} type="button"
+                    onClick={() => setEsAdmin(opt.value)}
+                    style={{
+                      flex: 1, padding: "8px", borderRadius: "7px", fontSize: "13px",
+                      fontWeight: 600, cursor: "pointer",
+                      border: `1.5px solid ${active ? opt.border : "#e2e8f0"}`,
+                      color: active ? opt.color : "#94a3b8",
+                      background: active ? opt.bg : "white",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ padding: "8px 12px", borderRadius: "7px", background: "#fef2f2", border: "1px solid #fecaca", fontSize: "13px", color: "#dc2626" }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "9px", borderRadius: "7px", border: "1px solid #e2e8f0", background: "white", color: "#64748b", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+              Cancelar
+            </button>
+            <button
+              type="submit" disabled={isPending || !nombre.trim() || !username.trim()}
+              style={{ flex: 1, padding: "9px", borderRadius: "7px", border: "none", background: isPending ? "#cbd5e1" : "#2563eb", color: "white", fontSize: "13px", fontWeight: 600, cursor: isPending ? "not-allowed" : "pointer" }}
+            >
+              {isPending ? "Creando..." : "Crear usuario"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+const labelStyle: React.CSSProperties = {
+  display: "block", marginBottom: "4px",
+  fontSize: "11px", fontWeight: 700, color: "#475569",
+  textTransform: "uppercase", letterSpacing: "0.06em",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", boxSizing: "border-box",
+  padding: "9px 11px", borderRadius: "7px",
+  border: "1px solid #e2e8f0", fontSize: "13px",
+  color: "#1e293b", background: "#f8fafc", outline: "none",
+};

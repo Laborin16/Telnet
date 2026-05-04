@@ -30,6 +30,7 @@ export interface Tarea {
   latitud: number | null;
   longitud: number | null;
   fecha_creada: string;
+  fecha_limite: string | null;
   fecha_asignada: string | null;
   fecha_iniciada: string | null;
   fecha_completada: string | null;
@@ -81,4 +82,14 @@ export interface TareaFiltros {
   estado?: EstadoTarea;
   tipo?: TipoTarea;
   prioridad?: PrioridadTarea;
+  tecnico_id?: number;
+}
+
+export interface TareaFoto {
+  id: number;
+  tarea_id: number;
+  ruta: string;
+  nombre_original: string;
+  subido_por_nombre: string;
+  timestamp: string;
 }

@@ -1,13 +1,30 @@
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.auth.models import Usuario
 from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
-from modules.reportes.models import Tarea, TareaEvento
+from modules.reportes.models import Tarea, TareaEvento, TareaFoto
 from modules.reportes.schemas import AsignarTecnico, TareaCreate, TareaUpdate, TransicionEstado
 from modules.reportes.state_machine import validar_transicion
+
+MEDIA_DIR = Path("media/fotos")
+MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+
+EXTENSIONES_PERMITIDAS = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
+
+SLA_HORAS: dict[str, int] = {
+    "FALLA_RED": 4,
+    "SOPORTE_TECNICO": 8,
+    "MANTENIMIENTO": 24,
+    "CAMBIO_PLAN": 24,
+    "INSTALACION": 48,
+    "REUBICACION": 48,
+    "RECOLECCION": 72,
+}
 
 
 async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Tarea:
@@ -19,6 +36,8 @@ async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Ta
         estado_inicial = EstadoTarea.ASIGNADO
         fecha_asignada = datetime.now()
 
+    fecha_creada = datetime.now()
+    horas_sla = SLA_HORAS.get(datos.tipo, 48)
     tarea = Tarea(
         id_servicio=datos.id_servicio,
         tipo=datos.tipo,
@@ -29,6 +48,8 @@ async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Ta
         supervisor_id=usuario["id"],
         latitud=datos.latitud,
         longitud=datos.longitud,
+        fecha_creada=fecha_creada,
+        fecha_limite=fecha_creada + timedelta(hours=horas_sla),
         fecha_asignada=fecha_asignada,
     )
     db.add(tarea)
@@ -69,6 +90,19 @@ async def asignar_tecnico(tarea_id: int, datos: AsignarTecnico, usuario: dict, d
     ))
     await db.commit()
     await db.refresh(tarea)
+
+    from modules.reportes import notificaciones
+    try:
+        await notificaciones.enviar_push(
+            usuario_id=tecnico.id,
+            titulo="Nueva tarea asignada",
+            cuerpo=f"{tarea.tipo.replace('_', ' ').title()} · Servicio {tarea.id_servicio}",
+            db=db,
+            data={"tarea_id": tarea.id},
+        )
+    except Exception:
+        pass
+
     return tarea
 
 
@@ -110,6 +144,33 @@ async def transicionar_estado(tarea_id: int, datos: TransicionEstado, usuario: d
     ))
     await db.commit()
     await db.refresh(tarea)
+
+    _ESTADOS_NOTIFICAR_SUPERVISOR = {
+        EstadoTarea.BLOQUEADO,
+        EstadoTarea.COMPLETADO,
+        EstadoTarea.CANCELADO,
+    }
+    if estado_nuevo in _ESTADOS_NOTIFICAR_SUPERVISOR:
+        _TITULOS = {
+            EstadoTarea.BLOQUEADO:   "Tarea bloqueada",
+            EstadoTarea.COMPLETADO:  "Tarea completada",
+            EstadoTarea.CANCELADO:   "Tarea cancelada",
+        }
+        cuerpo = f"{tarea.tipo.replace('_', ' ').title()} · Servicio {tarea.id_servicio}"
+        if estado_nuevo == EstadoTarea.BLOQUEADO and datos.comentario:
+            cuerpo += f"\n{datos.comentario}"
+        from modules.reportes import notificaciones
+        try:
+            await notificaciones.enviar_push(
+                usuario_id=tarea.supervisor_id,
+                titulo=_TITULOS[estado_nuevo],
+                cuerpo=cuerpo,
+                db=db,
+                data={"tarea_id": tarea.id},
+            )
+        except Exception:
+            pass
+
     return tarea
 
 
@@ -119,11 +180,16 @@ async def listar_tareas(
     estado: EstadoTarea | None = None,
     tipo: TipoTarea | None = None,
     prioridad: PrioridadTarea | None = None,
+    tecnico_id: int | None = None,
 ) -> list[Tarea]:
     query = select(Tarea).order_by(Tarea.fecha_creada.desc())
 
     if not usuario.get("es_admin"):
         query = query.where(Tarea.tecnico_id == usuario["id"])
+    elif tecnico_id == -1:
+        query = query.where(Tarea.tecnico_id.is_(None))
+    elif tecnico_id is not None:
+        query = query.where(Tarea.tecnico_id == tecnico_id)
 
     if estado is not None:
         query = query.where(Tarea.estado == estado)
@@ -185,6 +251,81 @@ async def _obtener_tarea_o_404(tarea_id: int, db: AsyncSession) -> Tarea:
     if tarea is None:
         raise ValueError("Tarea no encontrada")
     return tarea
+
+
+async def subir_foto(tarea_id: int, nombre_original: str, contenido: bytes, usuario: dict, db: AsyncSession) -> TareaFoto:
+    await obtener_tarea(tarea_id, usuario, db)  # valida acceso
+
+    ext = Path(nombre_original).suffix.lower()
+    if ext not in EXTENSIONES_PERMITIDAS:
+        raise ValueError(f"Tipo de archivo no permitido. Usa: {', '.join(EXTENSIONES_PERMITIDAS)}")
+
+    nombre_archivo = f"{uuid.uuid4().hex}{ext}"
+    ruta_archivo = MEDIA_DIR / nombre_archivo
+    ruta_archivo.write_bytes(contenido)
+
+    foto = TareaFoto(
+        tarea_id=tarea_id,
+        ruta=f"media/fotos/{nombre_archivo}",
+        nombre_original=nombre_original,
+        subido_por_id=usuario.get("id"),
+        subido_por_nombre=usuario.get("nombre", "Sin identificar"),
+        timestamp=datetime.now(),
+    )
+    db.add(foto)
+    await db.commit()
+    await db.refresh(foto)
+    return foto
+
+
+async def listar_fotos(tarea_id: int, usuario: dict, db: AsyncSession) -> list[TareaFoto]:
+    await obtener_tarea(tarea_id, usuario, db)  # valida acceso
+
+    resultado = await db.execute(
+        select(TareaFoto)
+        .where(TareaFoto.tarea_id == tarea_id)
+        .order_by(TareaFoto.timestamp)
+    )
+    return list(resultado.scalars().all())
+
+
+async def registrar_suscripcion(datos, usuario: dict, db: AsyncSession):
+    from modules.reportes.models import SuscripcionPush
+    resultado = await db.execute(
+        select(SuscripcionPush).where(
+            SuscripcionPush.usuario_id == usuario["id"],
+            SuscripcionPush.endpoint == datos.endpoint,
+        )
+    )
+    sub = resultado.scalar_one_or_none()
+    if sub:
+        sub.p256dh = datos.p256dh
+        sub.auth = datos.auth
+        sub.user_agent = datos.user_agent
+    else:
+        sub = SuscripcionPush(
+            usuario_id=usuario["id"],
+            endpoint=datos.endpoint,
+            p256dh=datos.p256dh,
+            auth=datos.auth,
+            user_agent=datos.user_agent,
+        )
+        db.add(sub)
+    await db.commit()
+
+
+async def eliminar_suscripcion(endpoint: str, usuario: dict, db: AsyncSession) -> None:
+    from modules.reportes.models import SuscripcionPush
+    resultado = await db.execute(
+        select(SuscripcionPush).where(
+            SuscripcionPush.usuario_id == usuario["id"],
+            SuscripcionPush.endpoint == endpoint,
+        )
+    )
+    sub = resultado.scalar_one_or_none()
+    if sub:
+        await db.delete(sub)
+        await db.commit()
 
 
 async def _verificar_tecnico(tecnico_id: int, db: AsyncSession) -> Usuario:
