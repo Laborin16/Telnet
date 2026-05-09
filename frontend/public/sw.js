@@ -1,5 +1,5 @@
 // Incrementar CACHE_VERSION al desplegar nueva versión para limpiar caché anterior
-const CACHE_VERSION = 'sit-v1';
+const CACHE_VERSION = 'sit-v2';
 
 const PRECACHE = [
   '/',
@@ -48,7 +48,8 @@ self.addEventListener('fetch', (event) => {
           cached ??
           fetch(request).then((resp) => {
             if (resp.ok) {
-              caches.open(CACHE_VERSION).then((c) => c.put(request, resp.clone()));
+              const clone = resp.clone();
+              caches.open(CACHE_VERSION).then((c) => c.put(request, clone));
             }
             return resp;
           })
@@ -62,7 +63,8 @@ self.addEventListener('fetch', (event) => {
     fetch(request)
       .then((resp) => {
         if (resp.ok) {
-          caches.open(CACHE_VERSION).then((c) => c.put(request, resp.clone()));
+          const clone = resp.clone();
+          caches.open(CACHE_VERSION).then((c) => c.put(request, clone));
         }
         return resp;
       })

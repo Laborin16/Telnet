@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
+from core.dependencies import get_usuario, requerir_admin
 from modules.auth.service import (
     login, cambiar_password, crear_usuario, actualizar_usuario,
     get_usuarios, reset_password, decode_token,
@@ -85,7 +86,11 @@ async def auth_cambiar_password(
 
 
 @router.get("/usuarios")
-async def auth_usuarios(db: AsyncSession = Depends(get_db)):
+async def auth_usuarios(
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    requerir_admin(usuario)
     return await get_usuarios(db)
 
 

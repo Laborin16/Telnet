@@ -1,25 +1,30 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { useTarea, useTareaTransiciones, useTareaEventos, useTareaFotos } from "../hooks/useTareas";
 import { useTransicionarEstado, useSubirFoto, useActualizarTarea, useAsignarTecnico } from "../hooks/useTareaActions";
 import { useGeolocation } from "../hooks/useGeolocation";
+import { useClientDetail } from "../../clients/hooks/useClientDetail";
 import { calcularSLA, fmtHoras, SLA_HORAS } from "../utils/sla";
 import apiClient from "../../../core/api/apiClient";
-import type { EstadoTarea, TipoTarea, PrioridadTarea } from "../types/reportes";
+import { vincularServicio } from "../api/reportes.api";
+import type { EstadoTarea, TipoTarea, PrioridadTarea, InstalacionDatos } from "../types/reportes";
 
 interface UsuarioItem { id: number; nombre: string; username: string; activo: boolean; }
 
 // ── Configuración de display ───────────────────────────────────────────────────
 
 const TIPO_LABEL: Record<TipoTarea, string> = {
-  INSTALACION:     "Instalación",
-  RECOLECCION:     "Recolección",
-  FALLA_RED:       "Falla de red",
-  SOPORTE_TECNICO: "Soporte técnico",
-  MANTENIMIENTO:   "Mantenimiento",
-  CAMBIO_PLAN:     "Cambio de plan",
-  REUBICACION:     "Reubicación",
+  INSTALACION:      "Instalación",
+  SERVICIO:         "Servicio",
+  RECOLECCION:      "Recolección",
+  RECONEXION:       "Reconexión",
+  CAMBIO_DOMICILIO: "Cambio de domicilio",
+  FALLA_RED:        "Falla de red",
+  SOPORTE_TECNICO:  "Soporte técnico",
+  MANTENIMIENTO:    "Mantenimiento",
+  CAMBIO_PLAN:      "Cambio de plan",
+  REUBICACION:      "Reubicación",
 };
 
 const ESTADO_CONFIG: Record<EstadoTarea, { label: string; color: string; bg: string; border: string }> = {
@@ -85,6 +90,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
   const { mutate: asignar, isPending: asignando } = useAsignarTecnico(tareaId);
   const { data: fotos = [] } = useTareaFotos(tareaId);
   const geo = useGeolocation();
+  const { data: cliente } = useClientDetail(tarea?.id_servicio ?? null);
 
   const { data: usuarios = [] } = useQuery<UsuarioItem[]>({
     queryKey: ["usuarios-lista"],
@@ -338,18 +344,36 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                   Detalles
                 </p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
-                  {[
-                    { label: "Cliente (servicio)", value: `#${tarea.id_servicio}` },
-                    { label: "Creada",     value: fmtDate(tarea.fecha_creada) },
-                    { label: "Asignada",   value: fmtDate(tarea.fecha_asignada) },
-                    { label: "Iniciada",   value: fmtDate(tarea.fecha_iniciada) },
-                    { label: "Completada", value: fmtDate(tarea.fecha_completada) },
-                  ].map(({ label, value }) => (
-                    <div key={label}>
-                      <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>{label}</p>
-                      <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{value}</p>
+                  {/* Info del cliente desde WispHub */}
+                  {cliente ? (
+                    <>
+                      {[
+                        { label: "Cliente", value: cliente.nombre || "—" },
+                        { label: "Servicio", value: `#${cliente.id_servicio}` },
+                        { label: "Teléfono", value: cliente.telefono || "—" },
+                        { label: "IP", value: cliente.ip || "—" },
+                        { label: "Plan", value: cliente.plan_internet?.nombre ?? "—" },
+                        { label: "Zona", value: cliente.zona?.nombre ?? "—" },
+                        { label: "Estado", value: cliente.estado },
+                      ].map(({ label, value }) => (
+                        <div key={label}>
+                          <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>{label}</p>
+                          <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{value}</p>
+                        </div>
+                      ))}
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Dirección</p>
+                        <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{cliente.direccion || "—"}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Servicio</p>
+                      <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>
+                        {tarea.id_servicio ? `#${tarea.id_servicio}` : "Pendiente de vincular"}
+                      </p>
                     </div>
-                  ))}
+                  )}
 
                   {/* Fila técnico con reasignación */}
                   <div style={{ gridColumn: "1 / -1" }}>
@@ -423,37 +447,11 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                 </div>
               </section>
 
-              {/* SLA */}
-              {(() => {
-                const sla = calcularSLA(tarea.tipo, tarea.estado, tarea.fecha_creada);
-                const barColor = sla.vencida ? "#dc2626" : sla.enRiesgo ? "#d97706" : "#16a34a";
-                const barPct = Math.min((sla.horasTranscurridas / sla.horasLimit) * 100, 100);
-                return (
-                  <section>
-                    <p style={{ margin: "0 0 8px", fontSize: "10px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                      SLA — {SLA_HORAS[tarea.tipo]}h límite
-                    </p>
-                    {sla.aplica ? (
-                      <>
-                        <div style={{ height: "6px", borderRadius: "3px", background: "#e2e8f0", overflow: "hidden", marginBottom: "6px" }}>
-                          <div style={{ height: "100%", width: `${barPct}%`, background: barColor, borderRadius: "3px", transition: "width 0.3s" }} />
-                        </div>
-                        <p style={{ margin: 0, fontSize: "12px", fontWeight: 600, color: barColor }}>
-                          {sla.vencida
-                            ? `Vencida hace ${fmtHoras(-sla.horasRestantes)}`
-                            : sla.enRiesgo
-                              ? `En riesgo — ${fmtHoras(sla.horasRestantes)} restantes`
-                              : `OK — ${fmtHoras(sla.horasRestantes)} restantes`}
-                        </p>
-                      </>
-                    ) : (
-                      <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>
-                        Tarea finalizada — SLA no aplica.
-                      </p>
-                    )}
-                  </section>
-                );
-              })()}
+              {/* Panel datos de instalación */}
+              {tarea.tipo === "INSTALACION" && tarea.datos_instalacion && (
+                <PanelInstalacion datos={tarea.datos_instalacion} tareaId={tarea.id} esAdmin={user?.rol === "administrador"} />
+              )}
+
 
               {/* Transiciones */}
               {transiciones.length > 0 && (
@@ -737,5 +735,112 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+// ── Panel datos de instalación ─────────────────────────────────────────────────
+
+const useStateLocal = useState;
+
+const SYNC_CONFIG = {
+  pending:    { label: "Pendiente",  color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
+  registrado: { label: "Registrado", color: "#2563eb", bg: "#eff6ff", border: "#93c5fd" },
+  vinculado:  { label: "Vinculado",  color: "#16a34a", bg: "#f0fdf4", border: "#86efac" },
+  error:      { label: "Error",      color: "#dc2626", bg: "#fef2f2", border: "#fca5a5" },
+};
+
+function PanelInstalacion({ datos, tareaId, esAdmin }: { datos: InstalacionDatos; tareaId: number; esAdmin?: boolean }) {
+  const [modoVincular, setModoVincular] = useStateLocal(false);
+  const [idServicioInput, setIdServicioInput] = useStateLocal("");
+  const queryClient = useQueryClient();
+  const { mutate: vincular, isPending: vinculando } = useMutation({
+    mutationFn: (id: number) => vincularServicio(tareaId, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tarea", tareaId] });
+      queryClient.invalidateQueries({ queryKey: ["tareas"] });
+      setModoVincular(false);
+      setIdServicioInput("");
+    },
+  });
+
+  const sync = datos.wisphub_sync ?? "pending";
+  const syncCfg = SYNC_CONFIG[sync] ?? SYNC_CONFIG.pending;
+
+  return (
+    <section>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+        <p style={{ margin: 0, fontSize: "10px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+          Datos de instalación
+        </p>
+        <span style={{ fontSize: "11px", fontWeight: 600, padding: "2px 8px", borderRadius: "12px", color: syncCfg.color, background: syncCfg.bg, border: `1px solid ${syncCfg.border}` }}>
+          WispHub: {syncCfg.label}
+        </span>
+      </div>
+
+      <div style={{ background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+        {/* Datos del cliente */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
+          {[
+            { label: "Nombre", value: datos.nombre_cliente },
+            { label: "Teléfono 1", value: datos.telefono ?? "—" },
+            { label: "Teléfono 2", value: datos.telefono2 ?? "—" },
+            { label: "Router", value: datos.router_nombre ?? `#${datos.router_id}` },
+            { label: "Plan", value: datos.plan_nombre ?? `#${datos.plan_id}` },
+            { label: "IP asignada", value: datos.ip_asignada },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>{label}</p>
+              <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500, fontFamily: label === "Usuario RB" || label === "IP asignada" ? "monospace" : undefined }}>
+                {value}
+              </p>
+            </div>
+          ))}
+          {datos.direccion && (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Dirección</p>
+              <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{datos.direccion}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Error WispHub */}
+        {sync === "error" && datos.wisphub_error && (
+          <div style={{ padding: "8px 10px", borderRadius: "6px", background: "#fef2f2", border: "1px solid #fecaca", fontSize: "12px", color: "#dc2626" }}>
+            ⚠ {datos.wisphub_error}
+          </div>
+        )}
+
+        {/* Vincular id_servicio */}
+        {esAdmin && sync !== "vinculado" && (
+          <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "10px", marginTop: "2px" }}>
+            {modoVincular ? (
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <input
+                  type="number"
+                  value={idServicioInput}
+                  onChange={e => setIdServicioInput(e.target.value)}
+                  placeholder="ID de servicio en WispHub"
+                  style={{ flex: 1, padding: "6px 10px", borderRadius: "6px", border: "1px solid #6366f1", fontSize: "13px", outline: "none" }}
+                />
+                <button
+                  onClick={() => idServicioInput && vincular(parseInt(idServicioInput, 10))}
+                  disabled={!idServicioInput || vinculando}
+                  style={{ padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: 700, border: "none", background: !idServicioInput || vinculando ? "#cbd5e1" : "#2563eb", color: "white", cursor: !idServicioInput || vinculando ? "not-allowed" : "pointer" }}
+                >
+                  {vinculando ? "..." : "Vincular"}
+                </button>
+                <button onClick={() => setModoVincular(false)} style={{ padding: "6px 10px", borderRadius: "6px", fontSize: "12px", border: "1px solid #e2e8f0", background: "white", color: "#64748b", cursor: "pointer" }}>
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setModoVincular(true)} style={{ fontSize: "12px", color: "#2563eb", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}>
+                + Vincular ID de servicio de WispHub
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

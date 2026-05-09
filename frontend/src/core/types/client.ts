@@ -54,8 +54,11 @@ export interface ClientListResponse {
 
 export interface ClientDetail {
   id_servicio: number;
+  nombre: string;
   usuario_rb: string;
   ip: string;
+  telefono: string;
+  direccion: string;
   estado: EstadoServicio;
   facturas_pagadas: boolean;
   firewall: boolean;

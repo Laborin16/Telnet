@@ -68,8 +68,11 @@ class ClientItem(BaseModel):
 
 class ClientDetail(BaseModel):
     id_servicio: int
+    nombre: Optional[str] = ""
     usuario_rb: Optional[str] = ""
     ip: Optional[str] = ""
+    telefono: Optional[str] = ""
+    direccion: Optional[str] = ""
     estado: Literal["Activo", "Suspendido", "Cancelado"]
     facturas_pagadas: bool
     firewall: bool

@@ -8,6 +8,10 @@ import type {
   TareaFoto,
   TareaUpdate,
   TransicionEstado,
+  WispZona,
+  WispPlan,
+  WispRouter,
+  WispIPs,
 } from "../types/reportes";
 
 const BASE = "/api/v1/reportes";
@@ -57,6 +61,31 @@ export async function transicionarEstado(id: number, datos: TransicionEstado): P
 
 export async function fetchFotos(id: number): Promise<TareaFoto[]> {
   const { data } = await apiClient.get(`${BASE}/tareas/${id}/fotos`);
+  return data;
+}
+
+export async function fetchZonas(): Promise<WispZona[]> {
+  const { data } = await apiClient.get(`${BASE}/zonas`);
+  return Array.isArray(data) ? data : (data?.results ?? []);
+}
+
+export async function fetchPlanes(): Promise<WispPlan[]> {
+  const { data } = await apiClient.get(`${BASE}/planes`);
+  return Array.isArray(data) ? data : (data?.results ?? []);
+}
+
+export async function fetchRouters(): Promise<WispRouter[]> {
+  const { data } = await apiClient.get(`${BASE}/routers`);
+  return Array.isArray(data) ? data : (data?.results ?? []);
+}
+
+export async function fetchIpsDisponibles(routerId: number): Promise<WispIPs> {
+  const { data } = await apiClient.get(`${BASE}/ips-disponibles`, { params: { router_id: routerId } });
+  return data as WispIPs;
+}
+
+export async function vincularServicio(tareaId: number, idServicio: number): Promise<Tarea> {
+  const { data } = await apiClient.patch(`${BASE}/tareas/${tareaId}/vincular-servicio`, { id_servicio: idServicio });
   return data;
 }
 

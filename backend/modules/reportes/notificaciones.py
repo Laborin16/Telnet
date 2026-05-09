@@ -21,7 +21,6 @@ from modules.reportes.models import SuscripcionPush
 logger = logging.getLogger(__name__)
 
 _pem_cache: str | None = None
-_alertas_sla_enviadas: set[int] = set()  # IDs de tareas ya notificadas (en memoria)
 
 
 def _get_private_key_pem() -> str | None:
@@ -88,41 +87,3 @@ async def enviar_push(
         await db.commit()
 
 
-async def job_alertas_sla() -> None:
-    """Corre cada 15 min: notifica al supervisor por cada tarea con SLA vencido."""
-    from sqlalchemy import select
-    from db.session import AsyncSessionLocal
-    from modules.reportes.models import Tarea
-    from modules.reportes.enums import EstadoTarea
-
-    estados_activos = [
-        EstadoTarea.PENDIENTE,
-        EstadoTarea.ASIGNADO,
-        EstadoTarea.EN_RUTA,
-        EstadoTarea.EN_EJECUCION,
-        EstadoTarea.BLOQUEADO,
-    ]
-
-    try:
-        async with AsyncSessionLocal() as db:
-            resultado = await db.execute(
-                select(Tarea).where(
-                    Tarea.fecha_limite < datetime.now(),
-                    Tarea.estado.in_([e.value for e in estados_activos]),
-                )
-            )
-            tareas_vencidas = list(resultado.scalars().all())
-
-            for tarea in tareas_vencidas:
-                if tarea.id in _alertas_sla_enviadas:
-                    continue
-                await enviar_push(
-                    usuario_id=tarea.supervisor_id,
-                    titulo="SLA vencido",
-                    cuerpo=f"{tarea.tipo.replace('_', ' ').title()} · Servicio {tarea.id_servicio}",
-                    db=db,
-                    data={"tarea_id": tarea.id},
-                )
-                _alertas_sla_enviadas.add(tarea.id)
-    except Exception as e:
-        logger.error("Error en job_alertas_sla: %s", e)

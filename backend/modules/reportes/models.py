@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
@@ -11,7 +11,8 @@ class Tarea(Base):
     __tablename__ = "tareas"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    id_servicio: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    id_servicio: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    datos_instalacion: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     tipo: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     prioridad: Mapped[str] = mapped_column(String(20), nullable=False, default=PrioridadTarea.MEDIA)
     estado: Mapped[str] = mapped_column(String(20), nullable=False, default=EstadoTarea.PENDIENTE, index=True)

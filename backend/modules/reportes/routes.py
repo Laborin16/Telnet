@@ -5,6 +5,7 @@ from core.dependencies import get_usuario
 from db.session import get_db
 from modules.reportes import service
 from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
+from core.wisphub.client import wisphub_client
 from modules.reportes.schemas import (
     AsignarTecnico,
     EliminarSuscripcionPush,
@@ -15,6 +16,7 @@ from modules.reportes.schemas import (
     TareaResponse,
     TareaUpdate,
     TransicionEstado,
+    VincularServicio,
 )
 from modules.reportes.state_machine import estados_siguientes
 
@@ -174,6 +176,47 @@ async def listar_fotos(
         raise HTTPException(status_code=403, detail=str(e))
 
 
+@router.get("/zonas")
+async def listar_zonas(usuario: dict = Depends(get_usuario)):
+    _requerir_autenticado(usuario)
+    return await wisphub_client.obtener_zonas()
+
+
+@router.get("/planes")
+async def listar_planes(usuario: dict = Depends(get_usuario)):
+    _requerir_autenticado(usuario)
+    return await wisphub_client.obtener_planes()
+
+
+@router.get("/routers")
+async def listar_routers(usuario: dict = Depends(get_usuario)):
+    _requerir_autenticado(usuario)
+    return await wisphub_client.obtener_routers()
+
+
+@router.get("/ips-disponibles")
+async def listar_ips_disponibles(
+    router_id: int = Query(...),
+    usuario: dict = Depends(get_usuario),
+):
+    _requerir_autenticado(usuario)
+    return await wisphub_client.obtener_ips_disponibles(router_id)
+
+
+@router.patch("/tareas/{tarea_id}/vincular-servicio", response_model=TareaResponse)
+async def vincular_servicio(
+    tarea_id: int,
+    datos: VincularServicio,
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    _requerir_admin(usuario)
+    try:
+        return await service.vincular_servicio(tarea_id, datos, usuario, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/push/suscribir", status_code=201)
 async def registrar_push(
     datos: SuscripcionPushCreate,
@@ -204,5 +247,5 @@ def _requerir_autenticado(usuario: dict) -> None:
 
 def _requerir_admin(usuario: dict) -> None:
     _requerir_autenticado(usuario)
-    if not usuario.get("es_admin"):
+    if usuario.get("rol") != "administrador" and not usuario.get("es_admin", False):
         raise HTTPException(status_code=403, detail="Solo supervisores pueden realizar esta acción")

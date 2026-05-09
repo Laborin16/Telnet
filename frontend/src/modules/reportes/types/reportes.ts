@@ -1,6 +1,9 @@
 export type TipoTarea =
   | "INSTALACION"
+  | "SERVICIO"
   | "RECOLECCION"
+  | "RECONEXION"
+  | "CAMBIO_DOMICILIO"
   | "FALLA_RED"
   | "SOPORTE_TECNICO"
   | "MANTENIMIENTO"
@@ -18,9 +21,26 @@ export type EstadoTarea =
 
 export type PrioridadTarea = "ALTA" | "MEDIA" | "BAJA";
 
+export interface InstalacionDatos {
+  nombre_cliente: string;
+  telefono: string | null;
+  telefono2: string | null;
+  direccion: string | null;
+  router_id: number;
+  router_nombre: string | null;
+  zona_id: number | null;
+  zona_nombre: string | null;
+  plan_id: number;
+  plan_nombre: string | null;
+  ip_asignada: string;
+  wisphub_sync: "pending" | "registrado" | "vinculado" | "error";
+  wisphub_task_id: string | null;
+  wisphub_error?: string;
+}
+
 export interface Tarea {
   id: number;
-  id_servicio: number;
+  id_servicio: number | null;
   tipo: TipoTarea;
   prioridad: PrioridadTarea;
   estado: EstadoTarea;
@@ -29,8 +49,8 @@ export interface Tarea {
   supervisor_id: number;
   latitud: number | null;
   longitud: number | null;
+  datos_instalacion: InstalacionDatos | null;
   fecha_creada: string;
-  fecha_limite: string | null;
   fecha_asignada: string | null;
   fecha_iniciada: string | null;
   fecha_completada: string | null;
@@ -50,14 +70,27 @@ export interface TareaEvento {
   lng_evento: number | null;
 }
 
+export interface InstalacionCreate {
+  nombre_cliente: string;
+  telefono?: string | null;
+  telefono2?: string | null;
+  direccion?: string | null;
+  router_id: number;
+  router_nombre?: string | null;
+  plan_id: number;
+  plan_nombre?: string | null;
+  ip_asignada: string;
+}
+
 export interface TareaCreate {
-  id_servicio: number;
+  id_servicio?: number | null;
   tipo: TipoTarea;
   prioridad?: PrioridadTarea;
   descripcion: string;
   tecnico_id?: number | null;
   latitud?: number | null;
   longitud?: number | null;
+  instalacion?: InstalacionCreate | null;
 }
 
 export interface TareaUpdate {
@@ -92,4 +125,31 @@ export interface TareaFoto {
   nombre_original: string;
   subido_por_nombre: string;
   timestamp: string;
+}
+
+export interface WispZona {
+  id: number;
+  nombre: string;
+}
+
+export interface WispPlan {
+  id: number;
+  nombre: string;
+  precio?: number;
+}
+
+export interface WispRouter {
+  id: number;
+  nombre: string;
+}
+
+export interface WispIPOcupada {
+  ip: string;
+  nombre: string;
+  estado: string;
+}
+
+export interface WispIPs {
+  disponibles: string[];
+  ocupadas: WispIPOcupada[];
 }

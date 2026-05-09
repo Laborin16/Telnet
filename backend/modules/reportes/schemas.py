@@ -1,18 +1,43 @@
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
 
 
+class InstalacionDatos(BaseModel):
+    """Datos del nuevo cliente para tareas de tipo INSTALACION."""
+    nombre_cliente: str
+    telefono: str | None = None
+    telefono2: str | None = None
+    direccion: str | None = None
+    router_id: int
+    router_nombre: str | None = None
+    zona_id: int | None = None       # derivado del router al crear
+    zona_nombre: str | None = None
+    plan_id: int
+    plan_nombre: str | None = None
+    ip_asignada: str
+
+    @field_validator("nombre_cliente", "ip_asignada")
+    @classmethod
+    def no_vacio(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Este campo no puede estar vacío")
+        return v
+
+
 class TareaCreate(BaseModel):
-    id_servicio: int
+    id_servicio: int | None = None        # Requerido para todos excepto INSTALACION
     tipo: TipoTarea
     prioridad: PrioridadTarea = PrioridadTarea.MEDIA
     descripcion: str
     tecnico_id: int | None = None
     latitud: float | None = None
     longitud: float | None = None
+    instalacion: InstalacionDatos | None = None   # Solo para INSTALACION
 
     @field_validator("descripcion")
     @classmethod
@@ -21,6 +46,16 @@ class TareaCreate(BaseModel):
         if not v:
             raise ValueError("La descripción no puede estar vacía")
         return v
+
+    @model_validator(mode="after")
+    def check_servicio_o_instalacion(self) -> "TareaCreate":
+        if self.tipo == TipoTarea.INSTALACION:
+            if not self.instalacion:
+                raise ValueError("Las tareas de instalación requieren el campo 'instalacion'")
+        else:
+            if not self.id_servicio:
+                raise ValueError("id_servicio es requerido para este tipo de tarea")
+        return self
 
 
 class TareaUpdate(BaseModel):
@@ -37,6 +72,11 @@ class TareaUpdate(BaseModel):
             if not v:
                 raise ValueError("La descripción no puede estar vacía")
         return v
+
+
+class VincularServicio(BaseModel):
+    """Permite ligar el id_servicio de WispHub a una instalación ya creada."""
+    id_servicio: int
 
 
 class AsignarTecnico(BaseModel):
@@ -57,7 +97,7 @@ class TransicionEstado(BaseModel):
 
 class TareaResponse(BaseModel):
     id: int
-    id_servicio: int
+    id_servicio: int | None
     tipo: TipoTarea
     prioridad: PrioridadTarea
     estado: EstadoTarea
@@ -66,8 +106,8 @@ class TareaResponse(BaseModel):
     supervisor_id: int
     latitud: float | None
     longitud: float | None
+    datos_instalacion: dict[str, Any] | None
     fecha_creada: datetime
-    fecha_limite: datetime | None
     fecha_asignada: datetime | None
     fecha_iniciada: datetime | None
     fecha_completada: datetime | None

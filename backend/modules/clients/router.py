@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
-from core.dependencies import get_wisphub_client, get_usuario
+from core.dependencies import get_wisphub_client, get_usuario, requerir_autenticado
 from modules.clients.service import ClientService
 from modules.auditlog.service import log_accion
 
@@ -15,7 +15,9 @@ async def list_clients(
     status: str = None,
     search: str = None,
     client: object = Depends(get_wisphub_client),
+    usuario: dict = Depends(get_usuario),
 ):
+    requerir_autenticado(usuario)
     service = ClientService(client)
     return await service.list_clients(page=page, page_size=page_size, status=status, search=search)
 
@@ -24,7 +26,9 @@ async def list_clients(
 async def get_client(
     client_id: int,
     client: object = Depends(get_wisphub_client),
+    usuario: dict = Depends(get_usuario),
 ):
+    requerir_autenticado(usuario)
     service = ClientService(client)
     return await service.get_client(client_id)
 

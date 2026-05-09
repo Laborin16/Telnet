@@ -3,20 +3,22 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { useTareas } from "../hooks/useTareas";
 import { useDebounce } from "../../../shared/hooks/useDebounce";
-import { calcularSLA, fmtHoras } from "../utils/sla";
 import apiClient from "../../../core/api/apiClient";
 import type { EstadoTarea, PrioridadTarea, Tarea, TipoTarea } from "../types/reportes";
 
 // ── Etiquetas y colores ────────────────────────────────────────────────────────
 
 const TIPO_LABEL: Record<TipoTarea, string> = {
-  INSTALACION:    "Instalación",
-  RECOLECCION:    "Recolección",
-  FALLA_RED:      "Falla de red",
-  SOPORTE_TECNICO:"Soporte técnico",
-  MANTENIMIENTO:  "Mantenimiento",
-  CAMBIO_PLAN:    "Cambio de plan",
-  REUBICACION:    "Reubicación",
+  INSTALACION:      "Instalación",
+  SERVICIO:         "Servicio",
+  RECOLECCION:      "Recolección",
+  RECONEXION:       "Reconexión",
+  CAMBIO_DOMICILIO: "Cambio de domicilio",
+  FALLA_RED:        "Falla de red",
+  SOPORTE_TECNICO:  "Soporte técnico",
+  MANTENIMIENTO:    "Mantenimiento",
+  CAMBIO_PLAN:      "Cambio de plan",
+  REUBICACION:      "Reubicación",
 };
 
 const ESTADO_CONFIG: Record<EstadoTarea, { label: string; color: string; bg: string; border: string }> = {
@@ -59,7 +61,6 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
   const { user } = useAuth();
   const [estadoFiltro, setEstadoFiltro]         = useState<EstadoTarea | "">("");
   const [prioridadFiltro, setPrioridadFiltro]   = useState<PrioridadTarea | "">("");
-  const [soloVencidas, setSoloVencidas]         = useState(false);
   const [tecnicoFiltro, setTecnicoFiltro]       = useState<number | "">("");
   const [busqueda, setBusqueda]                 = useState("");
   const debouncedBusqueda                       = useDebounce(busqueda, 200);
@@ -73,19 +74,18 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
     queryKey: ["usuarios-lista"],
     queryFn: async () => (await apiClient.get("/api/v1/auth/usuarios")).data,
     staleTime: 60_000,
-    enabled: !!user?.es_admin,
+    enabled: user?.rol === "administrador",
   });
   const tecnicosActivos = usuarios.filter(u => u.activo);
 
-  // Filtrado client-side por estado, prioridad, SLA y búsqueda
+  // Filtrado client-side por estado, prioridad y búsqueda
   const tareas = (todasLasTareas ?? []).filter(t => {
     if (estadoFiltro    && t.estado    !== estadoFiltro)    return false;
     if (prioridadFiltro && t.prioridad !== prioridadFiltro) return false;
-    if (soloVencidas && !calcularSLA(t.tipo, t.estado, t.fecha_creada).vencida) return false;
     if (debouncedBusqueda) {
       const q = debouncedBusqueda.toLowerCase();
       const matchDesc = t.descripcion.toLowerCase().includes(q);
-      const matchId   = String(t.id_servicio).includes(q);
+      const matchId   = t.id_servicio != null && String(t.id_servicio).includes(q);
       if (!matchDesc && !matchId) return false;
     }
     return true;
@@ -138,7 +138,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
               );
             })}
           <div style={{ flex: 1 }} />
-          {user?.es_admin && onNuevaTarea && (
+          {user?.rol === "administrador" && onNuevaTarea && (
             <button onClick={onNuevaTarea} style={{
               padding: "5px 14px", borderRadius: "7px", border: "none",
               background: "#2563eb", color: "white",
@@ -156,7 +156,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
           <p style={{ margin: 0, fontSize: "13px", color: "#64748b" }}>
             {isLoading ? "Cargando..." : isError ? "Error al cargar" : "Sin tareas"}
           </p>
-          {user?.es_admin && onNuevaTarea && (
+          {user?.rol === "administrador" && onNuevaTarea && (
             <button onClick={onNuevaTarea} style={{
               padding: "8px 16px", borderRadius: "7px", border: "none",
               background: "#2563eb", color: "white",
@@ -244,22 +244,10 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
               </button>
             );
           })}
-          <button
-            onClick={() => setSoloVencidas(v => !v)}
-            style={{
-              padding: "4px 12px", borderRadius: "20px", border: "1px solid",
-              borderColor: soloVencidas ? "#dc2626" : "#e2e8f0",
-              background: soloVencidas ? "#fef2f2" : "transparent",
-              color: soloVencidas ? "#dc2626" : "#64748b",
-              fontSize: "12px", fontWeight: soloVencidas ? 600 : 400, cursor: "pointer",
-            }}
-          >
-            ⚠ Vencidas
-          </button>
         </div>
 
         {/* Filtro por técnico (solo admins) */}
-        {user?.es_admin && tecnicosActivos.length > 0 && (
+        {user?.rol === "administrador" && tecnicosActivos.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
             <span style={labelStyle}>Técnico:</span>
             <select
@@ -334,7 +322,6 @@ function resaltarTexto(texto: string, busqueda: string): React.ReactNode {
 function TareaCard({ tarea, busqueda = "", onClick }: { tarea: Tarea; busqueda?: string; onClick: () => void }) {
   const estado = ESTADO_CONFIG[tarea.estado];
   const prioridad = PRIORIDAD_CONFIG[tarea.prioridad];
-  const sla = calcularSLA(tarea.tipo, tarea.estado, tarea.fecha_creada);
 
   return (
     <button
@@ -366,22 +353,6 @@ function TareaCard({ tarea, busqueda = "", onClick }: { tarea: Tarea; busqueda?:
           {estado.label}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {sla.vencida && (
-            <span style={{
-              fontSize: "11px", fontWeight: 700, padding: "2px 7px", borderRadius: "10px",
-              background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5",
-            }}>
-              ⚠ +{fmtHoras(-sla.horasRestantes)}
-            </span>
-          )}
-          {sla.enRiesgo && (
-            <span style={{
-              fontSize: "11px", fontWeight: 600, padding: "2px 7px", borderRadius: "10px",
-              background: "#fffbeb", color: "#d97706", border: "1px solid #fcd34d",
-            }}>
-              ⏱ {fmtHoras(sla.horasRestantes)}
-            </span>
-          )}
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: prioridad.color, display: "inline-block", flexShrink: 0 }} />
             <span style={{ fontSize: "11px", color: prioridad.color, fontWeight: 600 }}>{prioridad.label}</span>
@@ -406,9 +377,11 @@ function TareaCard({ tarea, busqueda = "", onClick }: { tarea: Tarea; busqueda?:
       {/* Fila inferior: ID servicio + fecha */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ fontSize: "12px", color: "#64748b" }}>
-          Servicio <strong style={{ color: "#334155" }}>
-            {resaltarTexto(`#${tarea.id_servicio}`, busqueda)}
-          </strong>
+          {tarea.id_servicio != null ? (
+            <>Servicio <strong style={{ color: "#334155" }}>{resaltarTexto(`#${tarea.id_servicio}`, busqueda)}</strong></>
+          ) : (
+            <span style={{ fontStyle: "italic" }}>Sin servicio asignado</span>
+          )}
         </span>
         <span style={{ fontSize: "11px", color: "#94a3b8" }}>
           {formatFecha(tarea.fecha_creada)}

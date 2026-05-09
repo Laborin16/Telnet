@@ -7,7 +7,7 @@ TRANSICIONES_VALIDAS: dict[EstadoTarea, set[EstadoTarea]] = {
     EstadoTarea.EN_EJECUCION: {EstadoTarea.COMPLETADO, EstadoTarea.BLOQUEADO, EstadoTarea.CANCELADO},
     EstadoTarea.BLOQUEADO:    {EstadoTarea.EN_RUTA, EstadoTarea.EN_EJECUCION, EstadoTarea.CANCELADO},
     EstadoTarea.COMPLETADO:   set(),
-    EstadoTarea.CANCELADO:    set(),
+    EstadoTarea.CANCELADO:    {EstadoTarea.PENDIENTE},
 }
 
 

@@ -36,7 +36,7 @@ export function ClientsTable({ clients, onSelect, obsMap, recoleccionIds }: Prop
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", minWidth: "1000px", borderCollapse: "collapse", fontSize: "13px" }}>
+      <table style={{ width: "100%", minWidth: "860px", borderCollapse: "collapse", fontSize: "13px" }}>
         <thead>
           <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
             <th style={{ ...th, textAlign: "center" }}>#</th>
@@ -64,7 +64,7 @@ export function ClientsTable({ clients, onSelect, obsMap, recoleccionIds }: Prop
                 <td style={{ ...td, textAlign: "center", color: "#94a3b8", fontSize: "12px" }}>
                   {client.id_servicio}
                 </td>
-                <td style={{ ...td, fontWeight: 500, color: "#0f172a", whiteSpace: "nowrap" }}>
+                <td style={{ ...td, fontWeight: 500, color: "#0f172a", whiteSpace: "nowrap", maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {client.nombre}
                 </td>
                 <td style={{ ...td, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#475569" }}>
@@ -103,7 +103,7 @@ export function ClientsTable({ clients, onSelect, obsMap, recoleccionIds }: Prop
 }
 
 const th: React.CSSProperties = {
-  padding: "9px 14px",
+  padding: "9px 11px",
   fontWeight: 600,
   fontSize: "11px",
   color: "#64748b",
@@ -114,7 +114,7 @@ const th: React.CSSProperties = {
 };
 
 const td: React.CSSProperties = {
-  padding: "11px 14px",
+  padding: "11px 11px",
   color: "#334155",
 };
 

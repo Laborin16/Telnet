@@ -2,13 +2,17 @@ import enum
 
 
 class TipoTarea(str, enum.Enum):
-    INSTALACION = "INSTALACION"
-    RECOLECCION = "RECOLECCION"
-    FALLA_RED = "FALLA_RED"
-    SOPORTE_TECNICO = "SOPORTE_TECNICO"
-    MANTENIMIENTO = "MANTENIMIENTO"
-    CAMBIO_PLAN = "CAMBIO_PLAN"
-    REUBICACION = "REUBICACION"
+    INSTALACION      = "INSTALACION"
+    SERVICIO         = "SERVICIO"
+    RECOLECCION      = "RECOLECCION"
+    RECONEXION       = "RECONEXION"
+    CAMBIO_DOMICILIO = "CAMBIO_DOMICILIO"
+    # Valores legacy — solo para compatibilidad con tareas existentes en DB
+    FALLA_RED        = "FALLA_RED"
+    SOPORTE_TECNICO  = "SOPORTE_TECNICO"
+    MANTENIMIENTO    = "MANTENIMIENTO"
+    CAMBIO_PLAN      = "CAMBIO_PLAN"
+    REUBICACION      = "REUBICACION"
 
 
 class EstadoTarea(str, enum.Enum):

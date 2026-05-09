@@ -11,7 +11,6 @@ from modules.finanzas.router import router as finanzas_router
 from modules.auditlog.router import router as audit_router
 from modules.auth.router import router as auth_router
 from modules.reportes.routes import router as reportes_router
-from modules.reportes.notificaciones import job_alertas_sla
 from db.session import engine
 from db.base import Base
 import modules.finanzas.models   # noqa: F401
@@ -26,7 +25,6 @@ scheduler = AsyncIOScheduler(timezone="America/Hermosillo")
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    scheduler.add_job(job_alertas_sla, "interval", minutes=15, id="alertas_sla")
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)

@@ -7,6 +7,7 @@ from core.dependencies import get_usuario
 from core.wisphub.client import wisphub_client
 from modules.whatsapp.service import ejecutar_recordatorios, send_template_message, SUSPENSION_HABILITADA, TEMPLATES
 from modules.auditlog.service import log_accion
+from core.dependencies import requerir_autenticado, requerir_admin
 
 router = APIRouter()
 
@@ -17,7 +18,11 @@ class TestMessageRequest(BaseModel):
 
 
 @router.post("/test")
-async def test_mensaje(body: TestMessageRequest):
+async def test_mensaje(
+    body: TestMessageRequest,
+    usuario: dict = Depends(get_usuario),
+):
+    requerir_admin(usuario)
     result = await send_template_message(body.phone, body.template_name, "Test", 0.0)
     if result["status_code"] not in (200, 201):
         raise HTTPException(status_code=400, detail=result["body"])
@@ -37,6 +42,7 @@ async def enviar_individual(
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
+    requerir_autenticado(usuario)
     dias_key = body.dias_vencido if body.dias_vencido in TEMPLATES else 7 if body.dias_vencido > 7 else None
     if dias_key is None:
         raise HTTPException(status_code=400, detail="No hay plantilla para este número de días.")
@@ -111,7 +117,8 @@ def _fecha_pago_date(f: dict):
 
 
 @router.get("/resumen")
-async def resumen_recordatorios():
+async def resumen_recordatorios(usuario: dict = Depends(get_usuario)):
+    requerir_autenticado(usuario)
     from datetime import date
     today = date.today()
 
@@ -185,6 +192,9 @@ async def ejecutar(
 
         resultado = await ejecutar_recordatorios(facturas)
 
+        suspendidos_lista = [
+            d for d in resultado["detalle"] if d.get("suspendido")
+        ]
         await log_accion(
             db=db,
             usuario=usuario,
@@ -197,7 +207,13 @@ async def ejecutar(
                 f"Sin teléfono: {sum(1 for d in resultado['detalle'] if d['estado'] == 'sin_telefono')}, "
                 f"Suspendidos: {resultado['suspendidos']}"
             ),
-            datos_extra={"detalle": resultado["detalle"]},
+            datos_extra={
+                "detalle": resultado["detalle"],
+                "suspendidos": [
+                    {"nombre": d["nombre"], "id_servicio": d.get("id_servicio"), "dias": d["dias"]}
+                    for d in suspendidos_lista
+                ],
+            },
         )
         return resultado
 

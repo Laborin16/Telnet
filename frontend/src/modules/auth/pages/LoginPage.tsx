@@ -1,5 +1,6 @@
 import { useState } from "react";
 import apiClient from "../../../core/api/apiClient";
+import { Eye, EyeOff } from "lucide-react";
 
 interface Props {
   onLogin: (token: string) => void;
@@ -68,6 +69,7 @@ export function LoginPage({ onLogin }: Props) {
               placeholder="tu.usuario"
               value={username}
               onChange={e => setUsername(e.target.value)}
+              className="sit-input"
               style={inputStyle}
               autoFocus
             />
@@ -82,19 +84,21 @@ export function LoginPage({ onLogin }: Props) {
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
+                className="sit-input"
                 style={{ ...inputStyle, width: "100%", boxSizing: "border-box", paddingRight: "40px" }}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(v => !v)}
+                className="sit-btn-icon"
                 style={{
                   position: "absolute", right: "10px", top: "50%",
                   transform: "translateY(-50%)",
                   background: "none", border: "none", cursor: "pointer",
-                  color: "#94a3b8", padding: "2px", lineHeight: 1,
+                  color: "#94a3b8", padding: "2px", display: "flex", alignItems: "center",
                 }}
               >
-                {showPassword ? "Ocultar" : "Ver"}
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
@@ -112,6 +116,7 @@ export function LoginPage({ onLogin }: Props) {
           <button
             type="submit"
             disabled={loading || !username.trim() || !password}
+            className="sit-btn-primary"
             style={{
               padding: "11px",
               borderRadius: "8px",

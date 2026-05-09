@@ -22,7 +22,7 @@ function decodeToken(token: string): (AuthUser & { exp: number }) | null {
       wisphub_id: payload.wisphub_id ?? null,
       username: payload.username ?? "",
       nombre: payload.nombre ?? "",
-      rol: (payload.rol ?? "tecnico") as RolUsuario,
+      rol: (payload.rol ?? (payload.es_admin ? "administrador" : "tecnico")) as RolUsuario,
       es_admin: payload.es_admin ?? false,
       debe_cambiar_password: payload.debe_cambiar_password ?? false,
       exp: payload.exp ?? 0,

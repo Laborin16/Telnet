@@ -101,10 +101,18 @@ class ClientService:
         }
 
     async def get_client(self, client_id: int) -> dict:
-        detail_raw, facturas_raw = await asyncio.gather(
+        detail_raw, facturas_raw, list_raw = await asyncio.gather(
             self.wisphub.get(f"/api/clientes/{client_id}/"),
             self.wisphub.get_all("/api/facturas/"),
+            self.wisphub.get("/api/clientes/", params={"id_servicio": client_id}),
         )
+        # El endpoint de detalle no devuelve nombre/telefono/dirección; los traemos del listado
+        list_results = list_raw.get("results", [])
+        if list_results:
+            item = list_results[0]
+            detail_raw.setdefault("nombre", item.get("nombre", ""))
+            detail_raw.setdefault("telefono", item.get("telefono", ""))
+            detail_raw.setdefault("direccion", item.get("direccion", ""))
         detail = ClientDetail(**detail_raw)
         vmap = _build_vencimiento_map(facturas_raw)
 

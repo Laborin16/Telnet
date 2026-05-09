@@ -21,7 +21,7 @@ class Usuario(Base):
     password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     rol: Mapped[RolUsuario] = mapped_column(
-        Enum(RolUsuario, name="rolusuario", create_constraint=True),
+        Enum(RolUsuario, name="rolusuario", create_constraint=True, values_callable=lambda x: [e.value for e in x]),
         default=RolUsuario.TECNICO,
         nullable=False,
     )

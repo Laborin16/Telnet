@@ -2,6 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
+from core.dependencies import get_usuario, requerir_admin
 from modules.auditlog.service import get_audit_logs, get_audit_modulos, get_audit_usuarios
 
 router = APIRouter()
@@ -18,17 +19,27 @@ async def audit_logs(
     fecha_desde: Optional[str] = Query(None),
     fecha_hasta: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
 ):
+    requerir_admin(usuario)
     return await get_audit_logs(
         db, page, page_size, modulo, accion, usuario_id, search, fecha_desde, fecha_hasta
     )
 
 
 @router.get("/modulos")
-async def audit_modulos(db: AsyncSession = Depends(get_db)):
+async def audit_modulos(
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    requerir_admin(usuario)
     return await get_audit_modulos(db)
 
 
 @router.get("/usuarios")
-async def audit_usuarios(db: AsyncSession = Depends(get_db)):
+async def audit_usuarios(
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    requerir_admin(usuario)
     return await get_audit_usuarios(db)

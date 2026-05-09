@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import Header
+from fastapi import Header, HTTPException
 from core.wisphub.client import wisphub_client
 
 
@@ -31,3 +31,14 @@ async def get_usuario(authorization: Optional[str] = Header(None)) -> dict:
         except Exception:
             pass
     return {"id": None, "nombre": "Sin identificar", "rol": "tecnico", "es_admin": False, "wisphub_id": None}
+
+
+def requerir_autenticado(usuario: dict) -> None:
+    if usuario.get("id") is None:
+        raise HTTPException(status_code=401, detail="Autenticación requerida.")
+
+
+def requerir_admin(usuario: dict) -> None:
+    requerir_autenticado(usuario)
+    if usuario.get("rol") != "administrador" and not usuario.get("es_admin", False):
+        raise HTTPException(status_code=403, detail="Solo administradores pueden realizar esta acción.")

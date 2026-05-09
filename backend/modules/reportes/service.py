@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from modules.auth.models import Usuario
 from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
 from modules.reportes.models import Tarea, TareaEvento, TareaFoto
-from modules.reportes.schemas import AsignarTecnico, TareaCreate, TareaUpdate, TransicionEstado
+from modules.reportes.schemas import AsignarTecnico, TareaCreate, TareaUpdate, TransicionEstado, VincularServicio
 from modules.reportes.state_machine import validar_transicion
 
 MEDIA_DIR = Path("media/fotos")
@@ -16,28 +16,69 @@ MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 EXTENSIONES_PERMITIDAS = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
 
-SLA_HORAS: dict[str, int] = {
-    "FALLA_RED": 4,
-    "SOPORTE_TECNICO": 8,
-    "MANTENIMIENTO": 24,
-    "CAMBIO_PLAN": 24,
-    "INSTALACION": 48,
-    "REUBICACION": 48,
-    "RECOLECCION": 72,
-}
-
 
 async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Tarea:
     estado_inicial = EstadoTarea.PENDIENTE
     fecha_asignada = None
 
     if datos.tecnico_id is not None:
-        tecnico = await _verificar_tecnico(datos.tecnico_id, db)
+        await _verificar_tecnico(datos.tecnico_id, db)
         estado_inicial = EstadoTarea.ASIGNADO
         fecha_asignada = datetime.now()
 
-    fecha_creada = datetime.now()
-    horas_sla = SLA_HORAS.get(datos.tipo, 48)
+    datos_instalacion: dict | None = None
+    if datos.tipo == TipoTarea.INSTALACION and datos.instalacion:
+        ins = datos.instalacion
+        from core.wisphub.client import wisphub_client
+
+        # Derivar zona del router si no viene en el payload
+        zona_id = ins.zona_id
+        zona_nombre = ins.zona_nombre
+        if zona_id is None:
+            zona_info = await wisphub_client.obtener_zona_de_router(ins.router_id)
+            if zona_info:
+                zona_id = zona_info.get("id")
+                zona_nombre = zona_info.get("nombre")
+
+        datos_instalacion = {
+            "nombre_cliente": ins.nombre_cliente,
+            "telefono": ins.telefono,
+            "telefono2": ins.telefono2,
+            "direccion": ins.direccion,
+            "router_id": ins.router_id,
+            "router_nombre": ins.router_nombre,
+            "zona_id": zona_id,
+            "zona_nombre": zona_nombre,
+            "plan_id": ins.plan_id,
+            "plan_nombre": ins.plan_nombre,
+            "ip_asignada": ins.ip_asignada,
+            "wisphub_sync": "pending",
+            "wisphub_task_id": None,
+        }
+        try:
+            wh_payload: dict = {
+                "usuario_rb": ins.ip_asignada,
+                "ip": ins.ip_asignada,
+                "plan_internet": ins.plan_id,
+                "nombre": ins.nombre_cliente,
+                "router": ins.router_id,
+            }
+            if ins.telefono:
+                wh_payload["telefono"] = ins.telefono
+            if ins.telefono2:
+                wh_payload["telefono_2"] = ins.telefono2
+            if ins.direccion:
+                wh_payload["direccion"] = ins.direccion
+            wh_resp = await wisphub_client.crear_cliente(zona_id, wh_payload)
+            datos_instalacion["wisphub_task_id"] = (
+                wh_resp.get("task_id") or wh_resp.get("id") or wh_resp.get("celery_task_id")
+            )
+            datos_instalacion["wisphub_sync"] = "registrado"
+            datos_instalacion["wisphub_resp"] = wh_resp
+        except Exception as exc:
+            datos_instalacion["wisphub_sync"] = "error"
+            datos_instalacion["wisphub_error"] = str(exc)
+
     tarea = Tarea(
         id_servicio=datos.id_servicio,
         tipo=datos.tipo,
@@ -48,8 +89,8 @@ async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Ta
         supervisor_id=usuario["id"],
         latitud=datos.latitud,
         longitud=datos.longitud,
-        fecha_creada=fecha_creada,
-        fecha_limite=fecha_creada + timedelta(hours=horas_sla),
+        datos_instalacion=datos_instalacion,
+        fecha_creada=datetime.now(),
         fecha_asignada=fecha_asignada,
     )
     db.add(tarea)
@@ -62,6 +103,20 @@ async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Ta
         estado_anterior=None,
         estado_nuevo=estado_inicial,
     ))
+    await db.commit()
+    await db.refresh(tarea)
+    return tarea
+
+
+async def vincular_servicio(tarea_id: int, datos: VincularServicio, usuario: dict, db: AsyncSession) -> Tarea:
+    """Vincula el id_servicio de WispHub a una tarea de instalación una vez que WispHub lo confirma."""
+    tarea = await _obtener_tarea_o_404(tarea_id, db)
+    if tarea.tipo != TipoTarea.INSTALACION:
+        raise ValueError("Solo se puede vincular un servicio a tareas de tipo INSTALACION")
+    tarea.id_servicio = datos.id_servicio
+    if tarea.datos_instalacion:
+        tarea.datos_instalacion = {**tarea.datos_instalacion, "wisphub_sync": "vinculado"}
+    tarea.updated_at = datetime.now()
     await db.commit()
     await db.refresh(tarea)
     return tarea
@@ -110,7 +165,7 @@ async def transicionar_estado(tarea_id: int, datos: TransicionEstado, usuario: d
     tarea = await _obtener_tarea_o_404(tarea_id, db)
 
     # Técnicos solo pueden transicionar sus propias tareas
-    if not usuario.get("es_admin") and tarea.tecnico_id != usuario["id"]:
+    if not _es_supervisor(usuario) and tarea.tecnico_id != usuario["id"]:
         raise PermissionError("No tienes permiso para modificar esta tarea")
 
     estado_actual = EstadoTarea(tarea.estado)
@@ -174,6 +229,10 @@ async def transicionar_estado(tarea_id: int, datos: TransicionEstado, usuario: d
     return tarea
 
 
+def _es_supervisor(usuario: dict) -> bool:
+    return usuario.get("rol") == "administrador" or usuario.get("es_admin", False)
+
+
 async def listar_tareas(
     usuario: dict,
     db: AsyncSession,
@@ -184,7 +243,7 @@ async def listar_tareas(
 ) -> list[Tarea]:
     query = select(Tarea).order_by(Tarea.fecha_creada.desc())
 
-    if not usuario.get("es_admin"):
+    if not _es_supervisor(usuario):
         query = query.where(Tarea.tecnico_id == usuario["id"])
     elif tecnico_id == -1:
         query = query.where(Tarea.tecnico_id.is_(None))
@@ -205,7 +264,7 @@ async def listar_tareas(
 async def obtener_tarea(tarea_id: int, usuario: dict, db: AsyncSession) -> Tarea:
     tarea = await _obtener_tarea_o_404(tarea_id, db)
 
-    if not usuario.get("es_admin") and tarea.tecnico_id != usuario["id"]:
+    if not _es_supervisor(usuario) and tarea.tecnico_id != usuario["id"]:
         raise PermissionError("No tienes permiso para ver esta tarea")
 
     return tarea
@@ -214,7 +273,7 @@ async def obtener_tarea(tarea_id: int, usuario: dict, db: AsyncSession) -> Tarea
 async def actualizar_tarea(tarea_id: int, datos: TareaUpdate, usuario: dict, db: AsyncSession) -> Tarea:
     tarea = await _obtener_tarea_o_404(tarea_id, db)
 
-    if not usuario.get("es_admin"):
+    if not _es_supervisor(usuario):
         raise PermissionError("Solo supervisores pueden editar los datos de una tarea")
 
     if datos.descripcion is not None:

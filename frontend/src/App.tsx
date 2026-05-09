@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, type ReactNode } from "react";
+import { Users, LayoutDashboard, Banknote, ClipboardList, Wrench, KeyRound, Menu, X, Eye, EyeOff } from "lucide-react";
 import { useAllClients } from "./modules/clients/hooks/useAllClients";
 import { ClientsTable } from "./modules/clients/components/ClientsTable";
 import { useDebounce } from "./shared/hooks/useDebounce";
@@ -25,13 +26,13 @@ type RolUsuario = "administrador" | "tecnico" | "cobranza";
 const PAGE_SIZE = 25;
 const ALERTA_ORDER: Record<string, number> = { critico: 0, pendiente: 1, suspendido: 2, normal: 3 };
 
-const NAV_ITEMS: { key: Tab; label: string; icon: string; roles: RolUsuario[] }[] = [
-  { key: "clientes",  label: "Clientes",  icon: "👥", roles: ["administrador", "cobranza"] },
-  { key: "dashboard", label: "Dashboard", icon: "📊", roles: ["administrador", "cobranza"] },
-  { key: "finanzas",  label: "Finanzas",  icon: "💰", roles: ["administrador", "cobranza"] },
-  { key: "auditoria", label: "Auditoría", icon: "📋", roles: ["administrador"] },
-  { key: "tareas",    label: "Tareas",    icon: "",   roles: ["administrador", "tecnico"] },
-  { key: "usuarios",  label: "Usuarios",  icon: "🔑", roles: ["administrador"] },
+const NAV_ITEMS: { key: Tab; label: string; icon: ReactNode; roles: RolUsuario[] }[] = [
+  { key: "clientes",  label: "Clientes",  icon: <Users size={16} />,           roles: ["administrador", "cobranza"] },
+  { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} />, roles: ["administrador", "cobranza"] },
+  { key: "finanzas",  label: "Finanzas",  icon: <Banknote size={16} />,        roles: ["administrador", "cobranza"] },
+  { key: "auditoria", label: "Auditoría", icon: <ClipboardList size={16} />,   roles: ["administrador"] },
+  { key: "tareas",    label: "Tareas",    icon: <Wrench size={16} />,          roles: ["administrador", "tecnico"] },
+  { key: "usuarios",  label: "Usuarios",  icon: <KeyRound size={16} />,        roles: ["administrador"] },
 ];
 
 export default function App() {
@@ -188,7 +189,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
             const active = tab === key;
             const badge = key === "tareas" && alertaCount > 0 ? alertaCount : 0;
             return (
-              <button key={key} onClick={() => { setTab(key); if (isMobile) setSidebarOpen(false); }} style={{
+              <button key={key} onClick={() => { setTab(key); if (isMobile) setSidebarOpen(false); }} className="sit-nav-item" style={{
                 display: "flex", alignItems: "center", gap: "9px",
                 width: "100%", padding: "9px 10px", marginBottom: "2px",
                 borderRadius: "7px", border: "none", cursor: "pointer",
@@ -197,7 +198,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                 background: active ? "rgba(59,130,246,0.18)" : "transparent",
                 textAlign: "left", position: "relative",
               }}>
-                <span style={{ fontSize: "15px", lineHeight: 1 }}>{icon}</span>
+                <span style={{ display: "flex", alignItems: "center", lineHeight: 1 }}>{icon}</span>
                 <span style={{ flex: 1 }}>{label}</span>
                 {badge > 0 && (
                   <span style={{
@@ -242,6 +243,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
             <button
               onClick={() => setShowChangePass(true)}
+              className="sit-btn-sidebar"
               style={{
                 flex: 1, padding: "5px 8px", borderRadius: "5px", fontSize: "11px",
                 border: "1px solid rgba(255,255,255,0.08)", background: "transparent",
@@ -252,6 +254,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
             </button>
             <button
               onClick={logout}
+              className="sit-btn-sidebar sit-btn-logout"
               style={{
                 flex: 1, padding: "5px 8px", borderRadius: "5px", fontSize: "11px",
                 border: "1px solid rgba(220,38,38,0.3)", background: "transparent",
@@ -280,9 +283,10 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           {isMobile && (
             <button
               onClick={() => setSidebarOpen(p => !p)}
-              style={{ background: "none", border: "none", cursor: "pointer", fontSize: "22px", lineHeight: 1, padding: "4px", color: "#0f172a", flexShrink: 0 }}
+              className="sit-btn-icon"
+              style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", color: "#0f172a", flexShrink: 0, display: "flex", alignItems: "center" }}
             >
-              ☰
+              <Menu size={22} />
             </button>
           )}
           <h1 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "#0f172a" }}>
@@ -329,6 +333,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                   <input
                     type="text" placeholder="Buscar por nombre, ID o teléfono..."
                     value={search} onChange={e => handleSearch(e.target.value)}
+                    className="sit-input"
                     style={{ ...inputStyle, minWidth: "260px" }}
                   />
                   <MultiSelect
@@ -343,6 +348,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                   <select
                     value={planFiltro}
                     onChange={e => { setPlanFiltro(e.target.value); setPage(1); }}
+                    className="sit-input"
                     style={{ ...inputStyle, minWidth: "180px", cursor: "pointer", color: planFiltro ? "#4338ca" : "#94a3b8", background: planFiltro ? "#eef2ff" : "#f8fafc", border: planFiltro ? "1px solid #6366f1" : "1px solid #e2e8f0" }}
                   >
                     <option value="">Todos los planes</option>
@@ -351,6 +357,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                   <select
                     value={zonaFiltro}
                     onChange={e => { setZonaFiltro(e.target.value); setPage(1); }}
+                    className="sit-input"
                     style={{ ...inputStyle, minWidth: "160px", cursor: "pointer", color: zonaFiltro ? "#0e7490" : "#94a3b8", background: zonaFiltro ? "#ecfeff" : "#f8fafc", border: zonaFiltro ? "1px solid #67e8f9" : "1px solid #e2e8f0" }}
                   >
                     <option value="">Todas las zonas</option>
@@ -374,7 +381,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                         const next = new Set(alerta);
                         if (next.has(key)) next.delete(key); else next.add(key);
                         setAlerta(next);
-                      }} style={{
+                      }} className="sit-pill" style={{
                         padding: "3px 11px", borderRadius: "20px",
                         border: `1px solid ${isActive ? color : "#e2e8f0"}`,
                         background: isActive ? activeBg : "transparent",
@@ -394,7 +401,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                         const next = new Set(status);
                         if (next.has("Recoleccion")) next.delete("Recoleccion"); else { next.clear(); next.add("Recoleccion"); }
                         setStatus(next);
-                      }} style={{
+                      }} className="sit-pill" style={{
                         padding: "3px 11px", borderRadius: "20px",
                         border: `1px solid ${isActive ? "#7c3aed" : "#e2e8f0"}`,
                         background: isActive ? "#f5f3ff" : "transparent",
@@ -414,7 +421,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                         const next = new Set(status);
                         if (next.has("Cancelado")) next.delete("Cancelado"); else { next.clear(); next.add("Cancelado"); }
                         setStatus(next);
-                      }} style={{
+                      }} className="sit-pill" style={{
                         padding: "3px 11px", borderRadius: "20px",
                         border: `1px solid ${isActive ? "#dc2626" : "#e2e8f0"}`,
                         background: isActive ? "#fef2f2" : "transparent",
@@ -448,7 +455,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                         : "Sin resultados"}
                     </span>
                     <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                      <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btnStyle(page === 1)}>← Anterior</button>
+                      <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="sit-btn-page" style={btnStyle(page === 1)}>← Anterior</button>
                       {Array.from({ length: totalPages }, (_, i) => i + 1)
                         .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
                         .reduce<(number | "...")[]>((acc, p, idx, arr) => {
@@ -457,9 +464,9 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
                         }, [])
                         .map((p, idx) =>
                           p === "..." ? <span key={`e-${idx}`} style={{ color: "#94a3b8", padding: "0 2px" }}>…</span>
-                            : <button key={p} onClick={() => setPage(p as number)} style={btnStyle(false, p === page)}>{p}</button>
+                            : <button key={p} onClick={() => setPage(p as number)} className={p === page ? "sit-btn-page sit-btn-page--active" : "sit-btn-page"} style={btnStyle(false, p === page)}>{p}</button>
                         )}
-                      <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btnStyle(page === totalPages)}>Siguiente →</button>
+                      <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="sit-btn-page" style={btnStyle(page === totalPages)}>Siguiente →</button>
                     </div>
                   </div>
                 </>
@@ -551,13 +558,15 @@ function ForzarCambioPassword({ onChanged }: { onChanged: (token: string) => voi
               <div style={{ position: "relative" }}>
                 <input
                   type={visible[key] ? "text" : "password"} value={value} onChange={e => set(e.target.value)} required
+                  className="sit-input"
                   style={{ width: "100%", boxSizing: "border-box", padding: "10px 40px 10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "14px", color: "#0f172a", outline: "none", background: "#f8fafc" }}
                 />
                 <button
                   type="button" onClick={() => toggleVisible(key)}
-                  style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#94a3b8", padding: "2px" }}
+                  className="sit-btn-icon"
+                  style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: "2px", display: "flex", alignItems: "center" }}
                 >
-                  {visible[key] ? "Ocultar" : "Ver"}
+                  {visible[key] ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
@@ -571,6 +580,7 @@ function ForzarCambioPassword({ onChanged }: { onChanged: (token: string) => voi
 
           <button
             type="submit" disabled={loading}
+            className="sit-btn-primary"
             style={{
               marginTop: "4px", padding: "11px", borderRadius: "8px", border: "none",
               background: loading ? "#cbd5e1" : "linear-gradient(135deg, #3b82f6, #1d4ed8)",
@@ -622,7 +632,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
         onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
           <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Cambiar contraseña</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "#94a3b8" }}>✕</button>
+          <button onClick={onClose} className="sit-btn-icon" style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", display: "flex", alignItems: "center", padding: "4px" }}><X size={18} /></button>
         </div>
 
         {success ? (
@@ -643,6 +653,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
               <div key={label} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "#475569" }}>{label}</label>
                 <input type="password" value={value} onChange={e => set(e.target.value)}
+                  className="sit-input"
                   style={{ padding: "9px 12px", borderRadius: "7px", border: "1px solid #e2e8f0", fontSize: "14px", color: "#0f172a", outline: "none" }} />
               </div>
             ))}
@@ -651,7 +662,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
                 {error}
               </div>
             )}
-            <button type="submit" disabled={loading} style={{
+            <button type="submit" disabled={loading} className="sit-btn-primary" style={{
               padding: "10px", borderRadius: "7px", border: "none",
               background: loading ? "#cbd5e1" : "#2563eb", color: "white",
               fontSize: "14px", fontWeight: 600, cursor: loading ? "not-allowed" : "pointer",

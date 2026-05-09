@@ -122,30 +122,33 @@ async def ejecutar_recordatorios(facturas: list[dict]) -> dict:
         telefono = (cliente.get("telefono") or "").split(",")[0].strip()
         monto = float(f.get("total") or 0)
 
+        id_servicio = None
+        for art in f.get("articulos", []):
+            id_servicio = (art.get("servicio") or {}).get("id_servicio")
+            if id_servicio:
+                break
+
         if not telefono:
             resultados["detalle"].append({
                 "nombre": nombre,
+                "id_servicio": id_servicio,
                 "dias": dias,
                 "estado": "sin_telefono",
             })
             return
 
-        # Día 4+: suspender primero (desactivado provisionalmente para pruebas)
-        if SUSPENSION_HABILITADA and dias >= 4:
-            id_servicio = None
-            for art in f.get("articulos", []):
-                id_servicio = (art.get("servicio") or {}).get("id_servicio")
-                if id_servicio:
-                    break
-            if id_servicio:
-                try:
-                    await wisphub_client.post(
-                        "/api/clientes/desactivar/",
-                        payload={"servicios": [id_servicio]}
-                    )
-                    resultados["suspendidos"] += 1
-                except Exception:
-                    pass
+        # Día 4+: suspender primero
+        suspendido = False
+        if SUSPENSION_HABILITADA and dias >= 4 and id_servicio:
+            try:
+                await wisphub_client.post(
+                    "/api/clientes/desactivar/",
+                    payload={"servicios": [id_servicio]}
+                )
+                suspendido = True
+                resultados["suspendidos"] += 1
+            except Exception:
+                pass
 
         template = TEMPLATES[dias_template]
         try:
@@ -155,8 +158,10 @@ async def ejecutar_recordatorios(facturas: list[dict]) -> dict:
                 wa_id = (result["body"].get("contacts") or [{}])[0].get("wa_id", "")
                 resultados["detalle"].append({
                     "nombre": nombre,
+                    "id_servicio": id_servicio,
                     "dias": dias,
                     "estado": "enviado",
+                    "suspendido": suspendido,
                     "template": template,
                     "wa_id": wa_id,
                 })
@@ -164,8 +169,10 @@ async def ejecutar_recordatorios(facturas: list[dict]) -> dict:
                 resultados["errores"] += 1
                 resultados["detalle"].append({
                     "nombre": nombre,
+                    "id_servicio": id_servicio,
                     "dias": dias,
                     "estado": "error",
+                    "suspendido": suspendido,
                     "error": str(result["body"]),
                 })
         except Exception as exc:
