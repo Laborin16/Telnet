@@ -288,7 +288,7 @@ async def get_alertas_cobranza() -> dict:
             grupos["dia_2"].append(item)
         elif dias == 3:
             grupos["dia_3"].append(item)
-        else:
+        elif dias <= 7:
             grupos["mas_de_3"].append(item)
 
     for g in grupos.values():
