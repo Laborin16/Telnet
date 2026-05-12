@@ -7,6 +7,7 @@ class TipoTarea(str, enum.Enum):
     RECOLECCION      = "RECOLECCION"
     RECONEXION       = "RECONEXION"
     CAMBIO_DOMICILIO = "CAMBIO_DOMICILIO"
+    TRABAJO_GENERAL  = "TRABAJO_GENERAL"
     # Valores legacy — solo para compatibilidad con tareas existentes en DB
     FALLA_RED        = "FALLA_RED"
     SOPORTE_TECNICO  = "SOPORTE_TECNICO"

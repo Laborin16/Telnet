@@ -4,6 +4,7 @@ export type TipoTarea =
   | "RECOLECCION"
   | "RECONEXION"
   | "CAMBIO_DOMICILIO"
+  | "TRABAJO_GENERAL"
   | "FALLA_RED"
   | "SOPORTE_TECNICO"
   | "MANTENIMIENTO"

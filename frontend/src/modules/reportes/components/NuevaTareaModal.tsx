@@ -14,6 +14,7 @@ const TIPOS_REGULARES: { value: TipoTarea; label: string }[] = [
   { value: "RECOLECCION",      label: "Recolección" },
   { value: "RECONEXION",       label: "Reconexión" },
   { value: "CAMBIO_DOMICILIO", label: "Cambio de domicilio" },
+  { value: "TRABAJO_GENERAL",  label: "Trabajo general" },
 ];
 
 const PRIORIDADES: { value: PrioridadTarea; label: string; color: string }[] = [
@@ -135,12 +136,12 @@ function FormTareaServicio({ onClose }: { onClose: () => void }) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedClient) { setError("Selecciona un cliente."); return; }
+    if (tipo !== "TRABAJO_GENERAL" && !selectedClient) { setError("Selecciona un cliente."); return; }
     if (!descripcion.trim()) { setError("La descripción es obligatoria."); return; }
     setError("");
     crearTarea(
       {
-        id_servicio: selectedClient.id_servicio,
+        id_servicio: selectedClient ? selectedClient.id_servicio : null,
         tipo, prioridad,
         descripcion: descripcion.trim(),
         tecnico_id: tecnicoId ? parseInt(tecnicoId, 10) : null,
@@ -161,7 +162,7 @@ function FormTareaServicio({ onClose }: { onClose: () => void }) {
       <PrioridadSelector value={prioridad} onChange={setPrioridad} />
 
       <div>
-        <label style={labelStyle}>Cliente</label>
+        <label style={labelStyle}>Cliente {tipo === "TRABAJO_GENERAL" && <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: "11px", textTransform: "none" }}>(Opcional)</span>}</label>
         {selectedClient ? (
           <ClienteCard client={selectedClient} onClear={() => setSelectedClient(null)} />
         ) : (

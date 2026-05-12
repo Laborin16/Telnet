@@ -52,7 +52,7 @@ class TareaCreate(BaseModel):
         if self.tipo == TipoTarea.INSTALACION:
             if not self.instalacion:
                 raise ValueError("Las tareas de instalación requieren el campo 'instalacion'")
-        else:
+        elif self.tipo != TipoTarea.TRABAJO_GENERAL:
             if not self.id_servicio:
                 raise ValueError("id_servicio es requerido para este tipo de tarea")
         return self

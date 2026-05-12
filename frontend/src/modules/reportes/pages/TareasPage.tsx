@@ -12,9 +12,10 @@ const TIPO_LABEL: Record<TipoTarea, string> = {
   INSTALACION:      "Instalación",
   SERVICIO:         "Servicio",
   RECOLECCION:      "Recolección",
-  RECONEXION:       "Reconexión",
+  RECONEXION: "Reconexión",
   CAMBIO_DOMICILIO: "Cambio de domicilio",
-  FALLA_RED:        "Falla de red",
+  TRABAJO_GENERAL: "Trabajo general",
+  FALLA_RED: "Falla de red",
   SOPORTE_TECNICO:  "Soporte técnico",
   MANTENIMIENTO:    "Mantenimiento",
   CAMBIO_PLAN:      "Cambio de plan",
@@ -110,6 +111,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
         }}>
           {(["PENDIENTE","ASIGNADO","EN_RUTA","EN_EJECUCION","BLOQUEADO","COMPLETADO","CANCELADO"] as EstadoTarea[])
             .filter(e => conteos[e] > 0)
+            .filter(e => !(user?.rol === "tecnico" && e === "PENDIENTE"))
             .map(e => {
               const cfg = ESTADO_CONFIG[e];
               const active = estadoFiltro === e;
@@ -210,7 +212,9 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
           <span style={labelStyle}>Estado:</span>
-          {ESTADOS_FILTRO.map(({ value, label }) => {
+          {ESTADOS_FILTRO
+            .filter(({ value }) => !(user?.rol === "tecnico" && value === "PENDIENTE"))
+            .map(({ value, label }) => {
             const active = estadoFiltro === value;
             const cfg = value ? ESTADO_CONFIG[value] : null;
             return (

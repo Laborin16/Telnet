@@ -245,6 +245,7 @@ async def listar_tareas(
 
     if not _es_supervisor(usuario):
         query = query.where(Tarea.tecnico_id == usuario["id"])
+        query = query.where(Tarea.estado != EstadoTarea.PENDIENTE)
     elif tecnico_id == -1:
         query = query.where(Tarea.tecnico_id.is_(None))
     elif tecnico_id is not None:
@@ -264,8 +265,11 @@ async def listar_tareas(
 async def obtener_tarea(tarea_id: int, usuario: dict, db: AsyncSession) -> Tarea:
     tarea = await _obtener_tarea_o_404(tarea_id, db)
 
-    if not _es_supervisor(usuario) and tarea.tecnico_id != usuario["id"]:
-        raise PermissionError("No tienes permiso para ver esta tarea")
+    if not _es_supervisor(usuario):
+        if tarea.tecnico_id != usuario["id"]:
+            raise PermissionError("No tienes permiso para ver esta tarea")
+        if tarea.estado == EstadoTarea.PENDIENTE:
+            raise PermissionError("No tienes permiso para ver tareas pendientes")
 
     return tarea
 

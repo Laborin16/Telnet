@@ -7,6 +7,10 @@ export const SLA_HORAS: Record<TipoTarea, number> = {
   CAMBIO_PLAN:     24,
   INSTALACION:     48,
   REUBICACION:     48,
+  SERVICIO:        48,
+  RECONEXION:      48,
+  CAMBIO_DOMICILIO:48,
+  TRABAJO_GENERAL: 48,
   RECOLECCION:     72,
 };
 

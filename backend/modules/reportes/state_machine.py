@@ -25,6 +25,8 @@ def validar_transicion(
         )
     if estado_nuevo == EstadoTarea.BLOQUEADO and not comentario:
         raise ValueError("Bloquear una tarea requiere un comentario explicando el motivo")
+    if estado_nuevo == EstadoTarea.COMPLETADO and not comentario:
+        raise ValueError("Completar una tarea requiere un comentario obligatorio")
 
 
 def estados_siguientes(estado_actual: EstadoTarea) -> set[EstadoTarea]:

@@ -18,9 +18,10 @@ const TIPO_LABEL: Record<TipoTarea, string> = {
   INSTALACION:      "Instalación",
   SERVICIO:         "Servicio",
   RECOLECCION:      "Recolección",
-  RECONEXION:       "Reconexión",
+  RECONEXION: "Reconexión",
   CAMBIO_DOMICILIO: "Cambio de domicilio",
-  FALLA_RED:        "Falla de red",
+  TRABAJO_GENERAL: "Trabajo general",
+  FALLA_RED: "Falla de red",
   SOPORTE_TECNICO:  "Soporte técnico",
   MANTENIMIENTO:    "Mantenimiento",
   CAMBIO_PLAN:      "Cambio de plan",
@@ -154,7 +155,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
 
   function confirmarTransicion() {
     if (!estadoPendiente) return;
-    if (estadoPendiente === "BLOQUEADO" && !comentario.trim()) {
+    if ((estadoPendiente === "BLOQUEADO" || estadoPendiente === "COMPLETADO") && !comentario.trim()) {
       setErrorComentario(true);
       return;
     }
@@ -492,12 +493,14 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                       <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#475569" }}>
                         {estadoPendiente === "BLOQUEADO"
                           ? "Comentario obligatorio — describe el motivo del bloqueo:"
-                          : "Comentario opcional:"}
+                          : estadoPendiente === "COMPLETADO"
+                            ? "Comentario obligatorio — notas de finalización:"
+                            : "Comentario opcional:"}
                       </p>
                       <textarea
                         value={comentario}
                         onChange={e => { setComentario(e.target.value); setErrorComentario(false); }}
-                        placeholder={estadoPendiente === "BLOQUEADO" ? "Motivo del bloqueo..." : "Agregar comentario..."}
+                        placeholder={estadoPendiente === "BLOQUEADO" ? "Motivo del bloqueo..." : estadoPendiente === "COMPLETADO" ? "Notas de finalización..." : "Agregar comentario..."}
                         rows={3}
                         style={{
                           width: "100%", boxSizing: "border-box",
@@ -509,7 +512,9 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                       />
                       {errorComentario && (
                         <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#dc2626" }}>
-                          El comentario es obligatorio para bloquear una tarea.
+                          {estadoPendiente === "BLOQUEADO" 
+                            ? "El comentario es obligatorio para bloquear una tarea."
+                            : "El comentario es obligatorio para completar una tarea."}
                         </p>
                       )}
 
