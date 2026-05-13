@@ -1,3 +1,4 @@
+
 #!/bin/bash
 # Arranca el backend y frontend para desarrollo local
 

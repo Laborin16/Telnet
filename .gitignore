@@ -13,6 +13,10 @@ venv/
 # Base de datos local
 backend/data/
 
+# Scripts dev/debug locales (no van a producción)
+backend/hunter.py
+backend/seed.py
+
 # Frontend
 node_modules/
 frontend/dist/
