@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 
-export type RolUsuario = "administrador" | "tecnico" | "cobranza";
+export type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza";
 
 export interface AuthUser {
   id: number;
