@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import apiClient from "../../../core/api/apiClient";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { useCalendarTareas } from "../hooks/useTareas";
-import type { EstadoTarea, PrioridadTarea, Tarea, TipoTarea } from "../types/reportes";
+import type { EstadoTarea, Tarea, TipoTarea } from "../types/reportes";
 
 // ── Constantes de layout ───────────────────────────────────────────────────────
 
@@ -11,7 +11,6 @@ const PX_HORA = 64;
 const HORA_INICIO = 7;
 const HORA_FIN = 21;
 const HORAS = Array.from({ length: HORA_FIN - HORA_INICIO + 1 }, (_, i) => HORA_INICIO + i);
-const TOTAL_HEIGHT = (HORA_FIN - HORA_INICIO) * PX_HORA;
 
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
