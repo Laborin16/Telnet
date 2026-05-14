@@ -688,6 +688,7 @@ function ReporteSemanalModal({
   const [fechaInicio, setFechaInicio] = useState(defaultFechaInicio);
   const [fechaFin, setFechaFin] = useState(defaultFechaFin);
   const { download, isLoading, error } = useDownloadReporte();
+  const today = toISODate(new Date());
 
   const getRange = () => {
     if (modo === "semana") {

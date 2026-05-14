@@ -5,7 +5,6 @@ import { useTarea, useTareaTransiciones, useTareaEventos, useTareaFotos } from "
 import { useTransicionarEstado, useSubirFoto, useActualizarTarea, useAsignarTecnico } from "../hooks/useTareaActions";
 import { useGeolocation } from "../hooks/useGeolocation";
 import { useClientDetail } from "../../clients/hooks/useClientDetail";
-import { calcularSLA, fmtHoras, SLA_HORAS } from "../utils/sla";
 import apiClient from "../../../core/api/apiClient";
 import { vincularServicio } from "../api/reportes.api";
 import type { EstadoTarea, TipoTarea, PrioridadTarea, InstalacionDatos } from "../types/reportes";
@@ -55,15 +54,6 @@ const PRIORIDAD_COLOR: Record<PrioridadTarea, string> = {
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString("es-MX", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
-}
 
 function fmtDateShort(iso: string): string {
   const d = new Date(iso);
