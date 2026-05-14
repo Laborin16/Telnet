@@ -23,8 +23,8 @@ def upgrade() -> None:
     with op.batch_alter_table('usuarios') as batch_op:
         batch_op.add_column(sa.Column('rol', sa.String(20), nullable=False, server_default='tecnico'))
 
-    # 2. Migrar admins existentes
-    op.execute("UPDATE usuarios SET rol = 'administrador' WHERE es_admin = 1")
+    # 2. Migrar admins existentes (compatible con SQLite y PostgreSQL)
+    op.execute("UPDATE usuarios SET rol = 'administrador' WHERE es_admin = TRUE")
 
     # 3. Eliminar es_admin
     with op.batch_alter_table('usuarios') as batch_op:
@@ -35,7 +35,7 @@ def downgrade() -> None:
     with op.batch_alter_table('usuarios') as batch_op:
         batch_op.add_column(sa.Column('es_admin', sa.Boolean(), nullable=False, server_default='0'))
 
-    op.execute("UPDATE usuarios SET es_admin = 1 WHERE rol = 'administrador'")
+    op.execute("UPDATE usuarios SET es_admin = TRUE WHERE rol = 'administrador'")
 
     with op.batch_alter_table('usuarios') as batch_op:
         batch_op.drop_column('rol')
