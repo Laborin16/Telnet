@@ -56,7 +56,7 @@ wisp-manager/
 
 ### `auth` — Usuarios locales
 
-- Tabla `usuarios` con 3 roles (valores en minúscula): `administrador`, `tecnico`, `cobranza`
+- Tabla `usuarios` con 4 roles (valores en minúscula): `administrador`, `supervisor`, `tecnico`, `cobranza`
 - JWT HS256 con 8 horas de expiración
 - `password_hash` nullable — permite crear usuarios sin password inicial
 - Flujo de primera vez: usuario creado con contraseña temporal + `debe_cambiar_password=True`
@@ -125,6 +125,12 @@ PENDIENTE ──→ ASIGNADO ──→ EN_RUTA ──→ EN_EJECUCION ──→ 
 - Al asignar técnico: envía Web Push al técnico
 - En BLOQUEADO / COMPLETADO / CANCELADO: envía Web Push al supervisor
 
+**Horario de tareas:**
+- Campos `fecha_inicio` y `fecha_fin` (DateTime nullable) en la tabla `tareas`
+- Se usan para mostrar bloques en el calendario semanal
+- Al crear/editar una tarea se puede definir un rango de fecha+hora exacto
+- El endpoint `GET /tareas` acepta `fecha_desde` y `fecha_hasta` para filtrar por rango
+
 **Tipo INSTALACION es especial:**
 1. Crea el cliente en WispHub async
 2. La tarea queda sin `id_servicio` hasta que se vincula manualmente
@@ -132,6 +138,7 @@ PENDIENTE ──→ ASIGNADO ──→ EN_RUTA ──→ EN_EJECUCION ──→ 
 
 **Control de acceso:**
 - TECNICO: solo ve sus propias tareas y no las PENDIENTE sin asignar
+- SUPERVISOR: ve y gestiona tareas (igual que administrador en reportes)
 - ADMINISTRADOR: ve y gestiona todo
 
 **Trazabilidad:** Cada cambio de estado genera un `TareaEvento` con timestamp, usuario, lat/lng y comentario.
@@ -229,9 +236,11 @@ PENDIENTE ──→ ASIGNADO ──→ EN_RUTA ──→ EN_EJECUCION ──→ 
 - **Estilos**: 100% inline CSS, sin framework de estilos.
 - **Sidebar responsive**: oculto en móvil (<768px), se abre con botón hamburguesa.
 - **Tabs por rol**:
-  - `administrador`: clientes, dashboard, finanzas, auditoría, tareas, usuarios
-  - `tecnico`: solo tareas (tab por defecto)
+  - `administrador`: clientes, dashboard, finanzas, auditoría, tareas, calendario, usuarios
+  - `supervisor`: clientes, dashboard, finanzas, tareas, calendario
+  - `tecnico`: tareas, calendario (tab por defecto: tareas)
   - `cobranza`: clientes, dashboard, finanzas
+- **Calendario semanal** (`CalendarPage`): vista lunes-domingo, horario 7:00-21:00, bloques por técnico con paleta de 8 colores, detección de solapamientos con columnas, línea de hora actual, navegación de semana y filtro por técnico.
 - **Badge de alertas**: número rojo en tab "Tareas" contando tareas BLOQUEADAS o con SLA vencido.
 - **Web Push**: se registra automáticamente al montar `MainApp` vía `usePushSubscription()`.
 
