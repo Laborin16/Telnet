@@ -247,5 +247,6 @@ def _requerir_autenticado(usuario: dict) -> None:
 
 def _requerir_admin(usuario: dict) -> None:
     _requerir_autenticado(usuario)
-    if usuario.get("rol") != "administrador" and not usuario.get("es_admin", False):
-        raise HTTPException(status_code=403, detail="Solo supervisores pueden realizar esta acción")
+    rol = usuario.get("rol")
+    if rol not in ("administrador", "supervisor") and not usuario.get("es_admin", False):
+        raise HTTPException(status_code=403, detail="Solo administradores o supervisores pueden realizar esta acción")

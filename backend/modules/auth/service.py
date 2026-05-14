@@ -107,7 +107,7 @@ async def crear_usuario(username: str, nombre: str, rol: str, db: AsyncSession) 
     try:
         rol_enum = RolUsuario(rol)
     except ValueError:
-        raise ValueError(f"Rol inválido: {rol}. Opciones: administrador, tecnico, cobranza.")
+        raise ValueError(f"Rol inválido: {rol}. Opciones: administrador, supervisor, tecnico, cobranza.")
 
     existing = await db.execute(select(Usuario).where(Usuario.username == username))
     if existing.scalar_one_or_none():

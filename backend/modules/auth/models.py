@@ -7,6 +7,7 @@ from db.base import Base
 
 class RolUsuario(str, enum.Enum):
     ADMINISTRADOR = "administrador"
+    SUPERVISOR    = "supervisor"
     TECNICO       = "tecnico"
     COBRANZA      = "cobranza"
 

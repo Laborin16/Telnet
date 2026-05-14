@@ -72,6 +72,7 @@ interface Props {
 
 export function TareaDetailModal({ tareaId, onClose }: Props) {
   const { user } = useAuth();
+  const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
   const { data: tarea, isLoading } = useTarea(tareaId);
   const { data: transiciones = [] } = useTareaTransiciones(tareaId);
   const { data: eventos = [] } = useTareaEventos(tareaId);
@@ -87,7 +88,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
     queryKey: ["usuarios-lista"],
     queryFn: async () => (await apiClient.get("/api/v1/auth/usuarios")).data,
     staleTime: 60_000,
-    enabled: !!user?.es_admin,
+    enabled: puedeGestionar,
   });
   const tecnicosActivos = usuarios.filter(u => u.activo);
 
@@ -226,7 +227,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
               {estadoActual.label}
             </span>
           )}
-          {user?.es_admin && tarea && !modoEdicion && (
+          {puedeGestionar && tarea && !modoEdicion && (
             <button
               onClick={abrirEdicion}
               style={{
@@ -408,7 +409,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                             ? (usuarios.find(u => u.id === tarea.tecnico_id)?.nombre ?? `#${tarea.tecnico_id}`)
                             : "Sin asignar"}
                         </p>
-                        {user?.es_admin && (
+                        {puedeGestionar && (
                           <button onClick={() => setModoAsignar(true)} style={{
                             padding: "2px 8px", borderRadius: "5px", fontSize: "11px",
                             border: "1px solid #e2e8f0", background: "transparent",
@@ -440,7 +441,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
 
               {/* Panel datos de instalación */}
               {tarea.tipo === "INSTALACION" && tarea.datos_instalacion && (
-                <PanelInstalacion datos={tarea.datos_instalacion} tareaId={tarea.id} esAdmin={user?.rol === "administrador"} />
+                <PanelInstalacion datos={tarea.datos_instalacion} tareaId={tarea.id} esAdmin={puedeGestionar} />
               )}
 
 

@@ -230,7 +230,7 @@ async def transicionar_estado(tarea_id: int, datos: TransicionEstado, usuario: d
 
 
 def _es_supervisor(usuario: dict) -> bool:
-    return usuario.get("rol") == "administrador" or usuario.get("es_admin", False)
+    return usuario.get("rol") in ("administrador", "supervisor") or usuario.get("es_admin", False)
 
 
 async def listar_tareas(

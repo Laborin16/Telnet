@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../../../core/api/apiClient";
 
-type RolUsuario = "administrador" | "tecnico" | "cobranza";
+type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza";
 
 const ROL_META: Record<RolUsuario, { label: string; color: string; bg: string; border: string }> = {
-  administrador: { label: "Admin",    color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
-  cobranza:      { label: "Cobranza", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
-  tecnico:       { label: "Técnico",  color: "#64748b", bg: "#f8fafc", border: "#e2e8f0" },
+  administrador: { label: "Admin",      color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
+  supervisor:    { label: "Supervisor", color: "#0e7490", bg: "#ecfeff", border: "#a5f3fc" },
+  cobranza:      { label: "Cobranza",   color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
+  tecnico:       { label: "Técnico",    color: "#64748b", bg: "#f8fafc", border: "#e2e8f0" },
 };
 
 interface UsuarioRow {

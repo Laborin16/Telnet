@@ -60,6 +60,7 @@ interface UsuarioItem { id: number; nombre: string; username: string; activo: bo
 
 export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
   const { user } = useAuth();
+  const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
   const [estadoFiltro, setEstadoFiltro]         = useState<EstadoTarea | "">("");
   const [prioridadFiltro, setPrioridadFiltro]   = useState<PrioridadTarea | "">("");
   const [tecnicoFiltro, setTecnicoFiltro]       = useState<number | "">("");
@@ -75,7 +76,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
     queryKey: ["usuarios-lista"],
     queryFn: async () => (await apiClient.get("/api/v1/auth/usuarios")).data,
     staleTime: 60_000,
-    enabled: user?.rol === "administrador",
+    enabled: puedeGestionar,
   });
   const tecnicosActivos = usuarios.filter(u => u.activo);
 
@@ -140,7 +141,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
               );
             })}
           <div style={{ flex: 1 }} />
-          {user?.rol === "administrador" && onNuevaTarea && (
+          {puedeGestionar && onNuevaTarea && (
             <button onClick={onNuevaTarea} style={{
               padding: "5px 14px", borderRadius: "7px", border: "none",
               background: "#2563eb", color: "white",
@@ -158,7 +159,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
           <p style={{ margin: 0, fontSize: "13px", color: "#64748b" }}>
             {isLoading ? "Cargando..." : isError ? "Error al cargar" : "Sin tareas"}
           </p>
-          {user?.rol === "administrador" && onNuevaTarea && (
+          {puedeGestionar && onNuevaTarea && (
             <button onClick={onNuevaTarea} style={{
               padding: "8px 16px", borderRadius: "7px", border: "none",
               background: "#2563eb", color: "white",
@@ -250,8 +251,8 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
           })}
         </div>
 
-        {/* Filtro por técnico (solo admins) */}
-        {user?.rol === "administrador" && tecnicosActivos.length > 0 && (
+        {/* Filtro por técnico (solo admins/supervisores) */}
+        {puedeGestionar && tecnicosActivos.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
             <span style={labelStyle}>Técnico:</span>
             <select
