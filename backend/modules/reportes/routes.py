@@ -43,11 +43,17 @@ async def listar_tareas(
     tipo: TipoTarea | None = Query(None),
     prioridad: PrioridadTarea | None = Query(None),
     tecnico_id: int | None = Query(None),
+    fecha_desde: str | None = Query(None, description="YYYY-MM-DD — filtra por fecha_inicio >= fecha_desde"),
+    fecha_hasta: str | None = Query(None, description="YYYY-MM-DD — filtra por fecha_inicio <= fecha_hasta"),
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
     _requerir_autenticado(usuario)
-    return await service.listar_tareas(usuario, db, estado=estado, tipo=tipo, prioridad=prioridad, tecnico_id=tecnico_id)
+    return await service.listar_tareas(
+        usuario, db,
+        estado=estado, tipo=tipo, prioridad=prioridad, tecnico_id=tecnico_id,
+        fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
+    )
 
 
 @router.get("/tareas/{tarea_id}", response_model=TareaResponse)

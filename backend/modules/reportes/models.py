@@ -27,6 +27,8 @@ class Tarea(Base):
     longitud: Mapped[float | None] = mapped_column(Float, nullable=True)
     fecha_creada: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
     fecha_limite: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    fecha_inicio: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    fecha_fin: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     fecha_asignada: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     fecha_iniciada: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     fecha_completada: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

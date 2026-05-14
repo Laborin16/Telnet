@@ -52,6 +52,9 @@ export interface Tarea {
   longitud: number | null;
   datos_instalacion: InstalacionDatos | null;
   fecha_creada: string;
+  fecha_limite: string | null;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
   fecha_asignada: string | null;
   fecha_iniciada: string | null;
   fecha_completada: string | null;
@@ -91,6 +94,8 @@ export interface TareaCreate {
   tecnico_id?: number | null;
   latitud?: number | null;
   longitud?: number | null;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
   instalacion?: InstalacionCreate | null;
 }
 
@@ -99,6 +104,8 @@ export interface TareaUpdate {
   descripcion?: string;
   latitud?: number | null;
   longitud?: number | null;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
 }
 
 export interface AsignarTecnico {
@@ -117,6 +124,8 @@ export interface TareaFiltros {
   tipo?: TipoTarea;
   prioridad?: PrioridadTarea;
   tecnico_id?: number;
+  fecha_desde?: string;
+  fecha_hasta?: string;
 }
 
 export interface TareaFoto {

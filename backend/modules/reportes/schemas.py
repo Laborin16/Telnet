@@ -37,6 +37,8 @@ class TareaCreate(BaseModel):
     tecnico_id: int | None = None
     latitud: float | None = None
     longitud: float | None = None
+    fecha_inicio: datetime | None = None
+    fecha_fin: datetime | None = None
     instalacion: InstalacionDatos | None = None   # Solo para INSTALACION
 
     @field_validator("descripcion")
@@ -63,6 +65,8 @@ class TareaUpdate(BaseModel):
     descripcion: str | None = None
     latitud: float | None = None
     longitud: float | None = None
+    fecha_inicio: datetime | None = None
+    fecha_fin: datetime | None = None
 
     @field_validator("descripcion")
     @classmethod
@@ -108,6 +112,9 @@ class TareaResponse(BaseModel):
     longitud: float | None
     datos_instalacion: dict[str, Any] | None
     fecha_creada: datetime
+    fecha_limite: datetime | None
+    fecha_inicio: datetime | None
+    fecha_fin: datetime | None
     fecha_asignada: datetime | None
     fecha_iniciada: datetime | None
     fecha_completada: datetime | None

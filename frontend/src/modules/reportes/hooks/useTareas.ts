@@ -54,3 +54,13 @@ export function useTareaFotos(id: number | null) {
     staleTime: 30_000,
   });
 }
+
+export function useCalendarTareas(fechaDesde: string, fechaHasta: string) {
+  return useQuery({
+    queryKey: ["tareas-calendario", fechaDesde, fechaHasta],
+    queryFn: () => fetchTareas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    placeholderData: (prev) => prev,
+  });
+}

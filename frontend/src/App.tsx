@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, type ReactNode } from "react";
-import { Users, LayoutDashboard, Banknote, ClipboardList, Wrench, KeyRound, Menu, X, Eye, EyeOff } from "lucide-react";
+import { Users, LayoutDashboard, Banknote, ClipboardList, Wrench, KeyRound, Menu, X, Eye, EyeOff, CalendarDays } from "lucide-react";
 import { useAllClients } from "./modules/clients/hooks/useAllClients";
 import { ClientsTable } from "./modules/clients/components/ClientsTable";
 import { useDebounce } from "./shared/hooks/useDebounce";
@@ -13,6 +13,7 @@ import { UsuariosPage } from "./modules/auth/pages/UsuariosPage";
 import { useObservaciones, useRecoleccion } from "./modules/finanzas/hooks/useCobranza";
 import { useAuth } from "./modules/auth/hooks/useAuth";
 import { TareasPage } from "./modules/reportes/pages/TareasPage";
+import { CalendarPage } from "./modules/reportes/pages/CalendarPage";
 import { TareaDetailModal } from "./modules/reportes/components/TareaDetailModal";
 import { NuevaTareaModal } from "./modules/reportes/components/NuevaTareaModal";
 import { useTareas } from "./modules/reportes/hooks/useTareas";
@@ -21,7 +22,7 @@ import { ToastProvider } from "./shared/components/ToastProvider";
 import { usePushSubscription } from "./modules/reportes/hooks/usePushSubscription";
 import apiClient from "./core/api/apiClient";
 
-type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "usuarios";
+type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "calendario" | "usuarios";
 type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza";
 const PAGE_SIZE = 25;
 const ALERTA_ORDER: Record<string, number> = { critico: 0, pendiente: 1, suspendido: 2, normal: 3 };
@@ -31,8 +32,9 @@ const NAV_ITEMS: { key: Tab; label: string; icon: ReactNode; roles: RolUsuario[]
   { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} />, roles: ["administrador", "supervisor", "cobranza"] },
   { key: "finanzas",  label: "Finanzas",  icon: <Banknote size={16} />,        roles: ["administrador", "cobranza"] },
   { key: "auditoria", label: "Auditoría", icon: <ClipboardList size={16} />,   roles: ["administrador"] },
-  { key: "tareas",    label: "Tareas",    icon: <Wrench size={16} />,          roles: ["administrador", "supervisor", "tecnico"] },
-  { key: "usuarios",  label: "Usuarios",  icon: <KeyRound size={16} />,        roles: ["administrador"] },
+  { key: "tareas",      label: "Tareas",      icon: <Wrench size={16} />,        roles: ["administrador", "supervisor", "tecnico"] },
+  { key: "calendario",  label: "Calendario",  icon: <CalendarDays size={16} />, roles: ["administrador", "supervisor", "tecnico"] },
+  { key: "usuarios",    label: "Usuarios",    icon: <KeyRound size={16} />,     roles: ["administrador"] },
 ];
 
 export default function App() {
@@ -319,6 +321,9 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
               onSelectTarea={id => setSelectedTareaId(id)}
               onNuevaTarea={() => setShowNuevaTarea(true)}
             />
+          )}
+          {tab === "calendario" && (
+            <CalendarPage onSelectTarea={id => setSelectedTareaId(id)} />
           )}
 
           {tab === "clientes" && (

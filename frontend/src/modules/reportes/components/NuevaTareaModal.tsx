@@ -124,6 +124,9 @@ function FormTareaServicio({ onClose }: { onClose: () => void }) {
   const [showDropdown, setShowDropdown]     = useState(false);
   const [tecnicoId, setTecnicoId]           = useState("");
   const [descripcion, setDescripcion]       = useState("");
+  const [fechaProgram, setFechaProgram]     = useState("");
+  const [horaInicio, setHoraInicio]         = useState("");
+  const [horaFin, setHoraFin]               = useState("");
   const [error, setError]                   = useState("");
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -134,17 +137,31 @@ function FormTareaServicio({ onClose }: { onClose: () => void }) {
       }).slice(0, 10)
     : [];
 
+  function buildHorario() {
+    if (!fechaProgram || !horaInicio || !horaFin) return { fecha_inicio: null, fecha_fin: null };
+    return {
+      fecha_inicio: `${fechaProgram}T${horaInicio}:00`,
+      fecha_fin: `${fechaProgram}T${horaFin}:00`,
+    };
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (tipo !== "TRABAJO_GENERAL" && !selectedClient) { setError("Selecciona un cliente."); return; }
     if (!descripcion.trim()) { setError("La descripción es obligatoria."); return; }
+    if (fechaProgram && horaInicio && horaFin && horaFin <= horaInicio) {
+      setError("La hora de fin debe ser posterior a la hora de inicio."); return;
+    }
     setError("");
+    const { fecha_inicio, fecha_fin } = buildHorario();
     crearTarea(
       {
         id_servicio: selectedClient ? selectedClient.id_servicio : null,
         tipo, prioridad,
         descripcion: descripcion.trim(),
         tecnico_id: tecnicoId ? parseInt(tecnicoId, 10) : null,
+        fecha_inicio,
+        fecha_fin,
       },
       { onSuccess: onClose, onError: (err: unknown) => setError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Error al crear la tarea.") }
     );
@@ -194,6 +211,12 @@ function FormTareaServicio({ onClose }: { onClose: () => void }) {
         <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Describe el trabajo a realizar..." rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
       </div>
 
+      <HorarioSelector
+        fecha={fechaProgram} onFecha={setFechaProgram}
+        horaInicio={horaInicio} onHoraInicio={setHoraInicio}
+        horaFin={horaFin} onHoraFin={setHoraFin}
+      />
+
       <ErrorMsg msg={error} />
       <Acciones isPending={isPending} onClose={onClose} label="Crear tarea" />
     </form>
@@ -221,10 +244,13 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
   });
   const tecnicosActivos = usuarios.filter(u => u.activo);
 
-  const [prioridad, setPrioridad] = useState<PrioridadTarea>("MEDIA");
-  const [tecnicoId, setTecnicoId] = useState("");
+  const [prioridad, setPrioridad]   = useState<PrioridadTarea>("MEDIA");
+  const [tecnicoId, setTecnicoId]   = useState("");
   const [descripcion, setDescripcion] = useState("");
-  const [error, setError] = useState("");
+  const [fechaProgram, setFechaProgram] = useState("");
+  const [horaInicio, setHoraInicio] = useState("");
+  const [horaFin, setHoraFin]       = useState("");
+  const [error, setError]           = useState("");
 
   // Datos del nuevo cliente
   const [nombre, setNombre]         = useState("");
@@ -266,13 +292,20 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
     if (!planId)        { setError("Selecciona un plan."); return; }
     if (!ip.trim())     { setError("La IP asignada es obligatoria."); return; }
     if (!descripcion.trim()) { setError("La descripción es obligatoria."); return; }
+    if (fechaProgram && horaInicio && horaFin && horaFin <= horaInicio) {
+      setError("La hora de fin debe ser posterior a la hora de inicio."); return;
+    }
     setError("");
+    const fecha_inicio = (fechaProgram && horaInicio) ? `${fechaProgram}T${horaInicio}:00` : null;
+    const fecha_fin    = (fechaProgram && horaFin)    ? `${fechaProgram}T${horaFin}:00`    : null;
     crearTarea(
       {
         tipo: "INSTALACION",
         prioridad,
         descripcion: descripcion.trim(),
         tecnico_id: tecnicoId ? parseInt(tecnicoId, 10) : null,
+        fecha_inicio,
+        fecha_fin,
         instalacion: {
           nombre_cliente: nombre.trim(),
           telefono: telefono.trim() || null,
@@ -414,6 +447,12 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
         <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Detalles de la instalación, acceso al domicilio, equipo a instalar..." rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
       </div>
 
+      <HorarioSelector
+        fecha={fechaProgram} onFecha={setFechaProgram}
+        horaInicio={horaInicio} onHoraInicio={setHoraInicio}
+        horaFin={horaFin} onHoraFin={setHoraFin}
+      />
+
       {/* Aviso WispHub */}
       <div style={{ padding: "10px 12px", borderRadius: "8px", background: "#f0fdf4", border: "1px solid #86efac", fontSize: "12px", color: "#15803d", display: "flex", gap: "8px", alignItems: "flex-start" }}>
         <span style={{ flexShrink: 0 }}>🔗</span>
@@ -513,6 +552,59 @@ function Acciones({ isPending, onClose, label, color = "#2563eb" }: { isPending:
       <button type="submit" disabled={isPending} style={{ padding: "8px 22px", borderRadius: "8px", fontSize: "13px", fontWeight: 700, cursor: isPending ? "not-allowed" : "pointer", border: "none", background: isPending ? "#cbd5e1" : color, color: "white", boxShadow: isPending ? "none" : `0 2px 8px ${color}55` }}>
         {label}
       </button>
+    </div>
+  );
+}
+
+// ── Horario selector ─────────────────────────────────────────────────────────
+
+function HorarioSelector({ fecha, onFecha, horaInicio, onHoraInicio, horaFin, onHoraFin }: {
+  fecha: string; onFecha: (v: string) => void;
+  horaInicio: string; onHoraInicio: (v: string) => void;
+  horaFin: string; onHoraFin: (v: string) => void;
+}) {
+  const [expandido, setExpandido] = useState(false);
+  const tiene = !!(fecha && horaInicio && horaFin);
+
+  return (
+    <div style={{ border: "1px solid #e2e8f0", borderRadius: "9px", overflow: "hidden" }}>
+      <button
+        type="button"
+        onClick={() => setExpandido(e => !e)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "9px 12px", background: tiene ? "#f0fdf4" : "#f8fafc",
+          border: "none", cursor: "pointer", fontSize: "12px",
+          color: tiene ? "#15803d" : "#64748b", fontWeight: 600,
+        }}
+      >
+        <span>🗓 {tiene ? `${fecha} · ${horaInicio} – ${horaFin}` : "Programar horario (opcional)"}</span>
+        <span style={{ fontSize: "10px" }}>{expandido ? "▲" : "▼"}</span>
+      </button>
+      {expandido && (
+        <div style={{ padding: "12px", borderTop: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>Fecha</label>
+            <input type="date" value={fecha} onChange={e => onFecha(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Hora inicio</label>
+            <input type="time" value={horaInicio} onChange={e => onHoraInicio(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Hora fin</label>
+            <input type="time" value={horaFin} onChange={e => onHoraFin(e.target.value)} style={inputStyle} />
+          </div>
+          {fecha && horaInicio && horaFin && (
+            <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => { onFecha(""); onHoraInicio(""); onHoraFin(""); }}
+                style={{ fontSize: "11px", color: "#dc2626", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                Quitar horario
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

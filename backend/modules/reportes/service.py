@@ -91,6 +91,8 @@ async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Ta
         longitud=datos.longitud,
         datos_instalacion=datos_instalacion,
         fecha_creada=datetime.now(),
+        fecha_inicio=datos.fecha_inicio,
+        fecha_fin=datos.fecha_fin,
         fecha_asignada=fecha_asignada,
     )
     db.add(tarea)
@@ -240,6 +242,8 @@ async def listar_tareas(
     tipo: TipoTarea | None = None,
     prioridad: PrioridadTarea | None = None,
     tecnico_id: int | None = None,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
 ) -> list[Tarea]:
     query = select(Tarea).order_by(Tarea.fecha_creada.desc())
 
@@ -257,6 +261,14 @@ async def listar_tareas(
         query = query.where(Tarea.tipo == tipo)
     if prioridad is not None:
         query = query.where(Tarea.prioridad == prioridad)
+
+    if fecha_desde is not None or fecha_hasta is not None:
+        query = query.where(Tarea.fecha_inicio.isnot(None))
+        if fecha_desde is not None:
+            query = query.where(Tarea.fecha_inicio >= datetime.fromisoformat(fecha_desde))
+        if fecha_hasta is not None:
+            end = datetime.fromisoformat(fecha_hasta).replace(hour=23, minute=59, second=59)
+            query = query.where(Tarea.fecha_inicio <= end)
 
     resultado = await db.execute(query)
     return list(resultado.scalars().all())
@@ -288,6 +300,10 @@ async def actualizar_tarea(tarea_id: int, datos: TareaUpdate, usuario: dict, db:
         tarea.latitud = datos.latitud
     if datos.longitud is not None:
         tarea.longitud = datos.longitud
+    if "fecha_inicio" in datos.model_fields_set:
+        tarea.fecha_inicio = datos.fecha_inicio
+    if "fecha_fin" in datos.model_fields_set:
+        tarea.fecha_fin = datos.fecha_fin
 
     tarea.updated_at = datetime.now()
     await db.commit()

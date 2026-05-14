@@ -367,6 +367,17 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                     </div>
                   )}
 
+                  {/* Horario programado */}
+                  {(tarea.fecha_inicio || tarea.fecha_fin) && (
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Horario programado</p>
+                      <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>
+                        {tarea.fecha_inicio ? fmtDate(tarea.fecha_inicio) : "—"}
+                        {tarea.fecha_fin ? ` → ${fmtDate(tarea.fecha_fin)}` : ""}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Fila técnico con reasignación */}
                   <div style={{ gridColumn: "1 / -1" }}>
                     <p style={{ margin: "0 0 4px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Técnico asignado</p>
