@@ -24,6 +24,9 @@ frontend/.vite/
 frontend/.env
 frontend/.env.*
 
+# Contexto local (no va a git)
+CLAUDE.md
+
 # IDEs
 .vscode/
 .idea/
