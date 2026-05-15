@@ -23,7 +23,7 @@ const PRIORIDADES: { value: PrioridadTarea; label: string; color: string }[] = [
   { value: "BAJA",  label: "Baja",  color: "#16a34a" },
 ];
 
-interface UsuarioItem { id: number; nombre: string; username: string; activo: boolean }
+interface UsuarioItem { id: number; nombre: string; username: string; activo: boolean; rol: string }
 
 // ── Componente principal ───────────────────────────────────────────────────────
 
@@ -115,7 +115,7 @@ function FormTareaServicio({ onClose }: { onClose: () => void }) {
     queryFn: async () => (await apiClient.get("/api/v1/auth/usuarios")).data,
     staleTime: 60_000,
   });
-  const tecnicosActivos = usuarios.filter(u => u.activo);
+  const tecnicosActivos = usuarios.filter(u => u.activo && u.rol === "tecnico");
 
   const [tipo, setTipo]                     = useState<TipoTarea>("SERVICIO");
   const [prioridad, setPrioridad]           = useState<PrioridadTarea>("MEDIA");
@@ -137,23 +137,20 @@ function FormTareaServicio({ onClose }: { onClose: () => void }) {
       }).slice(0, 10)
     : [];
 
-  function buildHorario() {
-    if (!fechaProgram || !horaInicio || !horaFin) return { fecha_inicio: null, fecha_fin: null };
-    return {
-      fecha_inicio: `${fechaProgram}T${horaInicio}:00`,
-      fecha_fin: `${fechaProgram}T${horaFin}:00`,
-    };
-  }
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (tipo !== "TRABAJO_GENERAL" && !selectedClient) { setError("Selecciona un cliente."); return; }
     if (!descripcion.trim()) { setError("La descripción es obligatoria."); return; }
+    const horarioParcial = (fechaProgram || horaInicio || horaFin) && !(fechaProgram && horaInicio && horaFin);
+    if (horarioParcial) {
+      setError("Completa fecha, hora de inicio y hora de fin, o quita el horario."); return;
+    }
     if (fechaProgram && horaInicio && horaFin && horaFin <= horaInicio) {
       setError("La hora de fin debe ser posterior a la hora de inicio."); return;
     }
     setError("");
-    const { fecha_inicio, fecha_fin } = buildHorario();
+    const fecha_inicio = fechaProgram && horaInicio && horaFin ? `${fechaProgram}T${horaInicio}:00` : null;
+    const fecha_fin    = fechaProgram && horaInicio && horaFin ? `${fechaProgram}T${horaFin}:00`    : null;
     crearTarea(
       {
         id_servicio: selectedClient ? selectedClient.id_servicio : null,
@@ -242,7 +239,7 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
     queryFn: fetchRouters,
     staleTime: 5 * 60_000,
   });
-  const tecnicosActivos = usuarios.filter(u => u.activo);
+  const tecnicosActivos = usuarios.filter(u => u.activo && u.rol === "tecnico");
 
   const [prioridad, setPrioridad]   = useState<PrioridadTarea>("MEDIA");
   const [tecnicoId, setTecnicoId]   = useState("");
@@ -292,12 +289,16 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
     if (!planId)        { setError("Selecciona un plan."); return; }
     if (!ip.trim())     { setError("La IP asignada es obligatoria."); return; }
     if (!descripcion.trim()) { setError("La descripción es obligatoria."); return; }
+    const horarioParcial = (fechaProgram || horaInicio || horaFin) && !(fechaProgram && horaInicio && horaFin);
+    if (horarioParcial) {
+      setError("Completa fecha, hora de inicio y hora de fin, o quita el horario."); return;
+    }
     if (fechaProgram && horaInicio && horaFin && horaFin <= horaInicio) {
       setError("La hora de fin debe ser posterior a la hora de inicio."); return;
     }
     setError("");
-    const fecha_inicio = (fechaProgram && horaInicio) ? `${fechaProgram}T${horaInicio}:00` : null;
-    const fecha_fin    = (fechaProgram && horaFin)    ? `${fechaProgram}T${horaFin}:00`    : null;
+    const fecha_inicio = fechaProgram && horaInicio && horaFin ? `${fechaProgram}T${horaInicio}:00` : null;
+    const fecha_fin    = fechaProgram && horaInicio && horaFin ? `${fechaProgram}T${horaFin}:00`    : null;
     crearTarea(
       {
         tipo: "INSTALACION",
@@ -563,8 +564,9 @@ function HorarioSelector({ fecha, onFecha, horaInicio, onHoraInicio, horaFin, on
   horaInicio: string; onHoraInicio: (v: string) => void;
   horaFin: string; onHoraFin: (v: string) => void;
 }) {
-  const [expandido, setExpandido] = useState(false);
+  const [expandido, setExpandido] = useState(!!(fecha || horaInicio || horaFin));
   const tiene = !!(fecha && horaInicio && horaFin);
+  const parcial = !tiene && !!(fecha || horaInicio || horaFin);
 
   return (
     <div style={{ border: "1px solid #e2e8f0", borderRadius: "9px", overflow: "hidden" }}>
@@ -573,12 +575,19 @@ function HorarioSelector({ fecha, onFecha, horaInicio, onHoraInicio, horaFin, on
         onClick={() => setExpandido(e => !e)}
         style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "9px 12px", background: tiene ? "#f0fdf4" : "#f8fafc",
+          padding: "9px 12px",
+          background: parcial ? "#fef2f2" : tiene ? "#f0fdf4" : "#f8fafc",
           border: "none", cursor: "pointer", fontSize: "12px",
-          color: tiene ? "#15803d" : "#64748b", fontWeight: 600,
+          color: parcial ? "#dc2626" : tiene ? "#15803d" : "#64748b", fontWeight: 600,
         }}
       >
-        <span>🗓 {tiene ? `${fecha} · ${horaInicio} – ${horaFin}` : "Programar horario (opcional)"}</span>
+        <span>
+          🗓 {tiene
+            ? `${fecha} · ${horaInicio} – ${horaFin}`
+            : parcial
+              ? "Horario incompleto — completa los tres campos o quítalo"
+              : "Programar horario (opcional)"}
+        </span>
         <span style={{ fontSize: "10px" }}>{expandido ? "▲" : "▼"}</span>
       </button>
       {expandido && (

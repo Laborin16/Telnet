@@ -6,7 +6,7 @@ from db.session import get_db
 from core.dependencies import get_usuario, requerir_admin
 from modules.auth.service import (
     login, cambiar_password, crear_usuario, actualizar_usuario,
-    get_usuarios, reset_password, decode_token,
+    get_usuarios, reset_password, eliminar_usuario, decode_token,
 )
 import jwt
 
@@ -56,7 +56,9 @@ async def auth_me(authorization: Optional[str] = Header(None)):
             "wisphub_id": payload.get("wisphub_id"),
             "username": payload.get("username"),
             "nombre": payload.get("nombre"),
+            "rol": payload.get("rol", "tecnico"),
             "es_admin": payload.get("es_admin", False),
+            "debe_cambiar_password": payload.get("debe_cambiar_password", False),
         }
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Sesión expirada. Inicia sesión nuevamente.")
@@ -133,6 +135,27 @@ async def auth_actualizar_usuario(
         return await actualizar_usuario(user_id, body.activo, body.rol, body.nombre, db)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/usuarios/{user_id}", status_code=204)
+async def auth_eliminar_usuario(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="No autenticado.")
+    try:
+        payload = decode_token(authorization[7:])
+        if not payload.get("es_admin"):
+            raise HTTPException(status_code=403, detail="Solo los administradores pueden eliminar usuarios.")
+        solicitante_id = int(payload["sub"])
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido.")
+    try:
+        await eliminar_usuario(user_id, solicitante_id, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/reset-password/{user_id}")

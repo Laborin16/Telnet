@@ -166,6 +166,17 @@ async def reset_password(user_id: int, db: AsyncSession) -> dict:
     return {"username": user.username, "nombre": user.nombre, "password_temporal": temp_pw}
 
 
+async def eliminar_usuario(user_id: int, solicitante_id: int, db: AsyncSession) -> None:
+    result = await db.execute(select(Usuario).where(Usuario.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise ValueError("Usuario no encontrado.")
+    if user.id == solicitante_id:
+        raise ValueError("No puedes eliminar tu propia cuenta.")
+    await db.delete(user)
+    await db.commit()
+
+
 def _usuario_dict(u: Usuario) -> dict:
     return {
         "id": u.id,

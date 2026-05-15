@@ -188,20 +188,25 @@ export function CalendarPage({ onSelectTarea }: Props) {
     return map;
   }, [usuarios]);
 
+  const tareasVisibles = useMemo(
+    () => tareas.filter(t => t.estado !== "PENDIENTE" && t.estado !== "CANCELADO"),
+    [tareas],
+  );
+
   const tecnicosEnSemana = useMemo(() => {
     const map = new Map<number, string>();
-    tareas.forEach(t => {
+    tareasVisibles.forEach(t => {
       if (t.tecnico_id !== null) {
         map.set(t.tecnico_id, tecNombreMap.get(t.tecnico_id) ?? `Técnico #${t.tecnico_id}`);
       }
     });
     return Array.from(map.entries()).map(([id, nombre]) => ({ id, nombre }));
-  }, [tareas, tecNombreMap]);
+  }, [tareasVisibles, tecNombreMap]);
 
   const tareasFiltradas = useMemo(() => {
-    if (!tecnicoFiltro) return tareas;
-    return tareas.filter(t => t.tecnico_id === tecnicoFiltro);
-  }, [tareas, tecnicoFiltro]);
+    if (!tecnicoFiltro) return tareasVisibles;
+    return tareasVisibles.filter(t => t.tecnico_id === tecnicoFiltro);
+  }, [tareasVisibles, tecnicoFiltro]);
 
   const tareasPorDia = useMemo(() => {
     const map = new Map<string, Tarea[]>();

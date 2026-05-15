@@ -35,14 +35,14 @@ async def get_cobros_semana(fecha_inicio: str | None = None) -> dict:
     start_str = start.isoformat()
     end_str = end.isoformat()
 
-    data = await wisphub_client.get("/api/facturas/", params={"page_size": 1000})
+    facturas = await wisphub_client.get_all("/api/facturas/")
 
     items = []
     total_monto = 0.0
     total_pagado = 0.0
     total_pendiente = 0.0
 
-    for f in data.get("results", []):
+    for f in facturas:
         emision = (f.get("fecha_emision") or "")[:10]
         if not (start_str <= emision <= end_str):
             continue
@@ -110,7 +110,7 @@ async def get_cobros_dia(fecha: str | None = None, fecha_fin: str | None = None,
     fecha_str = fecha or date.today().isoformat()
     fecha_fin_str = fecha_fin or fecha_str
 
-    data = await wisphub_client.get("/api/facturas/", params={"page_size": 1000})
+    facturas = await wisphub_client.get_all("/api/facturas/")
 
     verificaciones: dict[int, bool] = {}
     if db is not None:
@@ -121,7 +121,7 @@ async def get_cobros_dia(fecha: str | None = None, fecha_fin: str | None = None,
     lista_clientes = []
     monto_total_cobrado = 0.0
 
-    for f in data.get("results", []):
+    for f in facturas:
         emision = (f.get("fecha_emision") or "")[:10]
         if not (fecha_str <= emision <= fecha_fin_str):
             continue
@@ -1439,17 +1439,22 @@ def generar_pdf_reporte(data: dict) -> bytes:
 
 
 async def upload_comprobante(pago_id: int, filename: str, content: bytes, db: AsyncSession) -> dict:
+    result = await db.execute(select(PagoRegistrado).where(PagoRegistrado.id == pago_id))
+    registro = result.scalar_one_or_none()
+    if not registro:
+        raise ValueError(f"Pago {pago_id} no encontrado.")
+
+    directorio = os.path.join("data", "comprobantes")
+    os.makedirs(directorio, exist_ok=True)
+
     ext = os.path.splitext(filename)[1].lower()
     safe_name = f"{pago_id}_{uuid.uuid4().hex}{ext}"
-    path = os.path.join("data", "comprobantes", safe_name)
+    path = os.path.join(directorio, safe_name)
 
     with open(path, "wb") as f:
         f.write(content)
 
-    result = await db.execute(select(PagoRegistrado).where(PagoRegistrado.id == pago_id))
-    registro = result.scalar_one_or_none()
-    if registro:
-        registro.comprobante_path = path
-        await db.commit()
+    registro.comprobante_path = path
+    await db.commit()
 
     return {"comprobante_url": f"/static/comprobantes/{safe_name}"}

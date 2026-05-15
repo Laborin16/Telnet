@@ -241,7 +241,10 @@ async def subir_comprobante(
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="El archivo no puede superar 10 MB.")
-    result = await upload_comprobante(pago_id, file.filename, content, db)
+    try:
+        result = await upload_comprobante(pago_id, file.filename, content, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     await log_accion(
         db, usuario,
         accion="CREAR",

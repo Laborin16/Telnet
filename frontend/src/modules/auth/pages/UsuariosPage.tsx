@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../../../core/api/apiClient";
+import { useAuth } from "../hooks/useAuth";
+import { useToast } from "../../../shared/hooks/useToast";
 
 type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza";
 
@@ -22,9 +24,13 @@ interface UsuarioRow {
 }
 
 export function UsuariosPage() {
+  const { user } = useAuth();
+  const esAdmin = user?.rol === "administrador";
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
   const [passwordVisible, setPasswordVisible] = useState<{ nombre: string; username: string; password: string } | null>(null);
   const [showNuevoForm, setShowNuevoForm] = useState(false);
+  const [confirmarEliminar, setConfirmarEliminar] = useState<UsuarioRow | null>(null);
 
   const { data: usuarios = [], isLoading } = useQuery<UsuarioRow[]>({
     queryKey: ["usuarios"],
@@ -43,7 +49,20 @@ export function UsuariosPage() {
   const actualizarMutation = useMutation({
     mutationFn: async ({ id, ...body }: { id: number; activo?: boolean; rol?: RolUsuario }) =>
       (await apiClient.patch(`/api/v1/auth/usuarios/${id}`, body)).data,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["usuarios"] }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["usuarios"] });
+      if (variables.rol !== undefined) addToast("Rol actualizado correctamente.");
+      if (variables.activo !== undefined) addToast(variables.activo ? "Usuario activado." : "Usuario desactivado.");
+    },
+    onError: () => addToast("Error al actualizar el usuario.", "error"),
+  });
+
+  const eliminarMutation = useMutation({
+    mutationFn: async (userId: number) => apiClient.delete(`/api/v1/auth/usuarios/${userId}`),
+    onSuccess: () => {
+      setConfirmarEliminar(null);
+      queryClient.invalidateQueries({ queryKey: ["usuarios"] });
+    },
   });
 
   const crearMutation = useMutation({
@@ -64,15 +83,17 @@ export function UsuariosPage() {
           <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Gestión de usuarios</h2>
           <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94a3b8" }}>{usuarios.length} usuarios registrados</p>
         </div>
-        <button
-          onClick={() => setShowNuevoForm(true)}
-          style={{
-            padding: "8px 16px", borderRadius: "7px", border: "none", cursor: "pointer",
-            background: "#2563eb", color: "white", fontSize: "13px", fontWeight: 600,
-          }}
-        >
-          + Nuevo usuario
-        </button>
+        {esAdmin && (
+          <button
+            onClick={() => setShowNuevoForm(true)}
+            style={{
+              padding: "8px 16px", borderRadius: "7px", border: "none", cursor: "pointer",
+              background: "#2563eb", color: "white", fontSize: "13px", fontWeight: 600,
+            }}
+          >
+            + Nuevo usuario
+          </button>
+        )}
       </div>
 
       {/* Tabla */}
@@ -99,6 +120,7 @@ export function UsuariosPage() {
                     <RolSelector
                       rol={u.rol ?? (u.es_admin ? "administrador" : "tecnico")}
                       onChange={(nuevoRol) => actualizarMutation.mutate({ id: u.id, rol: nuevoRol })}
+                      disabled={actualizarMutation.isPending}
                     />
                   </td>
                   <td style={{ padding: "12px 16px" }}>
@@ -122,16 +144,30 @@ export function UsuariosPage() {
                       : <span style={{ fontSize: "11px", color: "#16a34a", fontWeight: 600 }}>✓ Configurada</span>}
                   </td>
                   <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                    <button
-                      onClick={() => resetMutation.mutate(u.id)}
-                      disabled={resetMutation.isPending}
-                      style={{
-                        padding: "4px 12px", borderRadius: "5px", fontSize: "12px", fontWeight: 600, cursor: "pointer",
-                        border: "1px solid #fecaca", background: "#fef2f2", color: "#dc2626",
-                      }}
-                    >
-                      Resetear clave
-                    </button>
+                    <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                      <button
+                        onClick={() => resetMutation.mutate(u.id)}
+                        disabled={resetMutation.isPending}
+                        style={{
+                          padding: "4px 12px", borderRadius: "5px", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                          border: "1px solid #fecaca", background: "#fef2f2", color: "#dc2626",
+                        }}
+                      >
+                        Resetear clave
+                      </button>
+                      {esAdmin && (
+                        <button
+                          onClick={() => setConfirmarEliminar(u)}
+                          style={{
+                            padding: "4px 10px", borderRadius: "5px", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                            border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8",
+                          }}
+                          title="Eliminar usuario"
+                        >
+                          🗑
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -148,6 +184,46 @@ export function UsuariosPage() {
           isPending={crearMutation.isPending}
           error={crearMutation.error ? String((crearMutation.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Error al crear usuario.") : ""}
         />
+      )}
+
+      {/* Modal confirmar eliminación */}
+      {confirmarEliminar && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => setConfirmarEliminar(null)}>
+          <div style={{ background: "white", borderRadius: "12px", padding: "28px", width: "380px", maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: "center", marginBottom: "20px" }}>
+              <div style={{ fontSize: "36px", marginBottom: "10px" }}>⚠️</div>
+              <h3 style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                Eliminar usuario
+              </h3>
+              <p style={{ margin: 0, fontSize: "13px", color: "#64748b", lineHeight: 1.5 }}>
+                ¿Estás seguro de que deseas eliminar a <strong>{confirmarEliminar.nombre}</strong>?<br />
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+            {eliminarMutation.error && (
+              <div style={{ padding: "8px 12px", marginBottom: "14px", borderRadius: "7px", background: "#fef2f2", border: "1px solid #fecaca", fontSize: "13px", color: "#dc2626", textAlign: "center" }}>
+                {String((eliminarMutation.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Error al eliminar.")}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => setConfirmarEliminar(null)}
+                style={{ flex: 1, padding: "9px", borderRadius: "7px", border: "1px solid #e2e8f0", background: "white", color: "#64748b", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => eliminarMutation.mutate(confirmarEliminar.id)}
+                disabled={eliminarMutation.isPending}
+                style={{ flex: 1, padding: "9px", borderRadius: "7px", border: "none", background: eliminarMutation.isPending ? "#cbd5e1" : "#dc2626", color: "white", fontSize: "13px", fontWeight: 600, cursor: eliminarMutation.isPending ? "not-allowed" : "pointer" }}
+              >
+                {eliminarMutation.isPending ? "Eliminando..." : "Sí, eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal contraseña generada */}
@@ -287,25 +363,50 @@ function NuevoUsuarioModal({
 
 // ── Selector de rol inline ─────────────────────────────────────────────────────
 
-function RolSelector({ rol, onChange }: { rol: RolUsuario; onChange: (r: RolUsuario) => void }) {
+function RolSelector({ rol, onChange, disabled }: { rol: RolUsuario; onChange: (r: RolUsuario) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0, openUp: false });
+  const btnRef = useRef<HTMLButtonElement>(null);
   const meta = ROL_META[rol] ?? ROL_META.tecnico;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (btnRef.current && !btnRef.current.closest("[data-rolselector]")?.contains(e.target as Node))
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  function handleOpen() {
+    if (disabled) return;
+    if (!btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    const dropH = 4 * 36; // aprox altura del dropdown (4 opciones)
+    const openUp = r.bottom + dropH > window.innerHeight;
+    setPos({ top: openUp ? r.top - dropH - 4 : r.bottom + 4, left: r.left, openUp });
+    setOpen(p => !p);
+  }
+
   return (
-    <div style={{ position: "relative", display: "inline-block" }}>
+    <div style={{ position: "relative", display: "inline-block" }} data-rolselector>
       <button
-        onClick={() => setOpen(p => !p)}
+        ref={btnRef}
+        onClick={handleOpen}
         style={{
           padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 600,
-          cursor: "pointer", background: meta.bg, color: meta.color, border: `1px solid ${meta.border}`,
+          cursor: disabled ? "not-allowed" : "pointer", background: meta.bg, color: meta.color,
+          border: `1px solid ${meta.border}`, opacity: disabled ? 0.6 : 1,
         }}
       >
         {meta.label} ▾
       </button>
       {open && (
         <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
+          position: "fixed", top: pos.top, left: pos.left, zIndex: 1000,
           background: "white", border: "1px solid #e2e8f0", borderRadius: "8px",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.1)", minWidth: "120px", overflow: "hidden",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: "130px", overflow: "hidden",
         }}>
           {(Object.entries(ROL_META) as [RolUsuario, typeof ROL_META[RolUsuario]][]).map(([value, m]) => (
             <button

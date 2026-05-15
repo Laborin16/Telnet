@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { useTareas } from "../hooks/useTareas";
 import { useDebounce } from "../../../shared/hooks/useDebounce";
@@ -56,21 +57,73 @@ interface TareasPageProps {
   onNuevaTarea?: () => void;
 }
 
-interface UsuarioItem { id: number; nombre: string; username: string; activo: boolean; }
+interface UsuarioItem { id: number; nombre: string; username: string; activo: boolean; rol: string; }
+
+type RangoRapido = "todo" | "hoy" | "semana" | "mes" | "personalizado";
 
 export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
   const { user } = useAuth();
   const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
+  const [subTab, setSubTab]                     = useState<"lista" | "dashboard">("lista");
   const [estadoFiltro, setEstadoFiltro]         = useState<EstadoTarea | "">("");
   const [prioridadFiltro, setPrioridadFiltro]   = useState<PrioridadTarea | "">("");
   const [tecnicoFiltro, setTecnicoFiltro]       = useState<number | "">("");
+  const [tipoFiltro, setTipoFiltro]             = useState<TipoTarea | "">("");
   const [busqueda, setBusqueda]                 = useState("");
   const debouncedBusqueda                       = useDebounce(busqueda, 200);
 
-  // Fetch con solo filtro de técnico → base para stats y lista
-  const { data: todasLasTareas, isLoading, isError } = useTareas({
-    tecnico_id: tecnicoFiltro || undefined,
-  });
+  function irALista(tecnicoId: number | "", tipo: TipoTarea | "" = "") {
+    setTecnicoFiltro(tecnicoId);
+    setTipoFiltro(tipo);
+    setEstadoFiltro("COMPLETADO");
+    setPrioridadFiltro("");
+    setBusqueda("");
+    setSubTab("lista");
+  }
+
+  // Filtro de fecha para el dashboard
+  const [rangoRapido, setRangoRapido]   = useState<RangoRapido>("todo");
+  const [dashDesde, setDashDesde]       = useState("");
+  const [dashHasta, setDashHasta]       = useState("");
+
+  // Fetch todas las tareas (sin filtro de técnico en dashboard)
+  const { data: todasLasTareas, isLoading, isError } = useTareas(
+    subTab === "lista" ? { tecnico_id: tecnicoFiltro || undefined } : {}
+  );
+
+  // Tareas filtradas por fecha para el dashboard
+  const tareasDashboard = useMemo(() => {
+    const todas = todasLasTareas ?? [];
+    if (rangoRapido === "todo") return todas;
+
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    let desde: Date | null = null;
+    let hasta: Date | null = null;
+
+    if (rangoRapido === "hoy") {
+      desde = hoy;
+      hasta = new Date(hoy); hasta.setHours(23, 59, 59, 999);
+    } else if (rangoRapido === "semana") {
+      desde = new Date(hoy);
+      desde.setDate(hoy.getDate() - hoy.getDay() + (hoy.getDay() === 0 ? -6 : 1));
+      hasta = new Date(desde); hasta.setDate(desde.getDate() + 6); hasta.setHours(23, 59, 59, 999);
+    } else if (rangoRapido === "mes") {
+      desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      hasta = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (rangoRapido === "personalizado") {
+      desde = dashDesde ? new Date(dashDesde + "T00:00:00") : null;
+      hasta = dashHasta ? new Date(dashHasta + "T23:59:59") : null;
+    }
+
+    return todas.filter(t => {
+      const fecha = new Date(t.fecha_creada);
+      if (desde && fecha < desde) return false;
+      if (hasta && fecha > hasta) return false;
+      return true;
+    });
+  }, [todasLasTareas, rangoRapido, dashDesde, dashHasta]);
 
   const { data: usuarios = [] } = useQuery<UsuarioItem[]>({
     queryKey: ["usuarios-lista"],
@@ -78,12 +131,13 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
     staleTime: 60_000,
     enabled: puedeGestionar,
   });
-  const tecnicosActivos = usuarios.filter(u => u.activo);
+  const tecnicosActivos = usuarios.filter(u => u.activo && u.rol === "tecnico");
 
-  // Filtrado client-side por estado, prioridad y búsqueda
+  // Filtrado client-side por estado, prioridad, tipo y búsqueda
   const tareas = (todasLasTareas ?? []).filter(t => {
     if (estadoFiltro    && t.estado    !== estadoFiltro)    return false;
     if (prioridadFiltro && t.prioridad !== prioridadFiltro) return false;
+    if (tipoFiltro      && t.tipo      !== tipoFiltro)      return false;
     if (debouncedBusqueda) {
       const q = debouncedBusqueda.toLowerCase();
       const matchDesc = t.descripcion.toLowerCase().includes(q);
@@ -93,83 +147,95 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
     return true;
   });
 
-  // Conteos para stats bar (sin filtros de estado/prioridad/vencidas)
-  const conteos = (todasLasTareas ?? []).reduce<Record<string, number>>((acc, t) => {
-    acc[t.estado] = (acc[t.estado] ?? 0) + 1;
-    return acc;
-  }, {});
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
 
-      {/* ── Stats bar ─────────────────────────────────── */}
-      {!isLoading && !isError && todasLasTareas && todasLasTareas.length > 0 && (
-        <div style={{
-          display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center",
-          background: "white", borderRadius: "10px",
-          border: "1px solid #e2e8f0", padding: "10px 14px",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-        }}>
-          {(["PENDIENTE","ASIGNADO","EN_RUTA","EN_EJECUCION","BLOQUEADO","COMPLETADO","CANCELADO"] as EstadoTarea[])
-            .filter(e => conteos[e] > 0)
-            .filter(e => !(user?.rol === "tecnico" && e === "PENDIENTE"))
-            .map(e => {
-              const cfg = ESTADO_CONFIG[e];
-              const active = estadoFiltro === e;
-              return (
-                <button
-                  key={e}
-                  onClick={() => setEstadoFiltro(active ? "" : e)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: "5px",
-                    padding: "3px 10px", borderRadius: "20px", fontSize: "12px",
-                    fontWeight: active ? 700 : 500, cursor: "pointer",
-                    border: `1px solid ${active ? cfg.border : "#e2e8f0"}`,
-                    color: active ? cfg.color : "#475569",
-                    background: active ? cfg.bg : "transparent",
-                  }}
-                >
-                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: cfg.color, flexShrink: 0 }} />
-                  {cfg.label}
-                  <span style={{
-                    fontSize: "11px", fontWeight: 700,
-                    color: active ? cfg.color : "#94a3b8",
-                  }}>
-                    {conteos[e]}
-                  </span>
-                </button>
-              );
-            })}
-          <div style={{ flex: 1 }} />
-          {puedeGestionar && onNuevaTarea && (
-            <button onClick={onNuevaTarea} style={{
-              padding: "5px 14px", borderRadius: "7px", border: "none",
-              background: "#2563eb", color: "white",
-              fontSize: "13px", fontWeight: 600, cursor: "pointer",
+      {/* ── Sub-tabs ──────────────────────────────────── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: "4px", background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", padding: "3px" }}>
+          {(["lista", "dashboard"] as const).map(t => (
+            <button key={t} onClick={() => setSubTab(t)} style={{
+              padding: "5px 16px", borderRadius: "6px", border: "none",
+              background: subTab === t ? "#2563eb" : "transparent",
+              color: subTab === t ? "white" : "#64748b",
+              fontSize: "13px", fontWeight: subTab === t ? 600 : 400, cursor: "pointer",
             }}>
-              + Nueva tarea
+              {t === "lista" ? "Lista" : "Dashboard"}
             </button>
-          )}
+          ))}
         </div>
+        {puedeGestionar && onNuevaTarea && (
+          <button onClick={onNuevaTarea} style={{
+            padding: "6px 16px", borderRadius: "7px", border: "none",
+            background: "#2563eb", color: "white",
+            fontSize: "13px", fontWeight: 600, cursor: "pointer",
+          }}>
+            + Nueva tarea
+          </button>
+        )}
+      </div>
+
+      {/* ── Dashboard ─────────────────────────────────── */}
+      {subTab === "dashboard" && (
+        <>
+          {/* Filtro de fecha */}
+          <div style={{
+            background: "white", borderRadius: "10px", border: "1px solid #e2e8f0",
+            padding: "10px 14px", display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center",
+          }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em", marginRight: "2px" }}>
+              Período:
+            </span>
+            {([
+              { value: "todo",         label: "Todo" },
+              { value: "hoy",          label: "Hoy" },
+              { value: "semana",       label: "Esta semana" },
+              { value: "mes",          label: "Este mes" },
+              { value: "personalizado",label: "Personalizado" },
+            ] as { value: RangoRapido; label: string }[]).map(({ value, label }) => (
+              <button key={value} onClick={() => setRangoRapido(value)} style={{
+                padding: "4px 12px", borderRadius: "20px", border: "1px solid",
+                borderColor: rangoRapido === value ? "#2563eb" : "#e2e8f0",
+                background: rangoRapido === value ? "#eff6ff" : "transparent",
+                color: rangoRapido === value ? "#2563eb" : "#64748b",
+                fontSize: "12px", fontWeight: rangoRapido === value ? 600 : 400, cursor: "pointer",
+              }}>
+                {label}
+              </button>
+            ))}
+            {rangoRapido === "personalizado" && (
+              <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="date" value={dashDesde} onChange={e => setDashDesde(e.target.value)}
+                  style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid #e2e8f0", fontSize: "12px", color: "#334155", outline: "none" }}
+                />
+                <span style={{ fontSize: "12px", color: "#94a3b8" }}>—</span>
+                <input
+                  type="date" value={dashHasta} onChange={e => setDashHasta(e.target.value)}
+                  min={dashDesde}
+                  style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid #e2e8f0", fontSize: "12px", color: "#334155", outline: "none" }}
+                />
+              </div>
+            )}
+            {rangoRapido !== "todo" && (
+              <span style={{ fontSize: "12px", color: "#94a3b8", marginLeft: "4px" }}>
+                {tareasDashboard.length} tarea{tareasDashboard.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+
+          <TareasDashboard
+            tareas={tareasDashboard}
+            tecnicos={tecnicosActivos}
+            isLoading={isLoading}
+            onDrillDown={irALista}
+          />
+        </>
       )}
 
-      {/* Sin stats: barra simple ──────────────────────── */}
-      {(isLoading || isError || !todasLasTareas || todasLasTareas.length === 0) && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
-          <p style={{ margin: 0, fontSize: "13px", color: "#64748b" }}>
-            {isLoading ? "Cargando..." : isError ? "Error al cargar" : "Sin tareas"}
-          </p>
-          {puedeGestionar && onNuevaTarea && (
-            <button onClick={onNuevaTarea} style={{
-              padding: "8px 16px", borderRadius: "7px", border: "none",
-              background: "#2563eb", color: "white",
-              fontSize: "13px", fontWeight: 600, cursor: "pointer",
-            }}>
-              + Nueva tarea
-            </button>
-          )}
-        </div>
-      )}
+      {/* ── Vista lista ───────────────────────────────── */}
+      {subTab === "lista" && <>
+
 
       {/* ── Filtros ───────────────────────────────────── */}
       <div style={{
@@ -303,6 +369,168 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
           ))}
         </div>
       )}
+
+      </> /* fin subTab lista */}
+    </div>
+  );
+}
+
+// ── Dashboard de tareas ────────────────────────────────────────────────────────
+
+const TIPO_COLORS: Record<TipoTarea, string> = {
+  INSTALACION:      "#2563eb",
+  SERVICIO:         "#7c3aed",
+  RECOLECCION:      "#db2777",
+  RECONEXION:       "#0891b2",
+  CAMBIO_DOMICILIO: "#d97706",
+  TRABAJO_GENERAL:  "#64748b",
+  FALLA_RED:        "#dc2626",
+  SOPORTE_TECNICO:  "#16a34a",
+  MANTENIMIENTO:    "#9333ea",
+  CAMBIO_PLAN:      "#0d9488",
+  REUBICACION:      "#ea580c",
+};
+
+function TareasDashboard({ tareas, tecnicos, isLoading, onDrillDown }: {
+  tareas: Tarea[];
+  tecnicos: UsuarioItem[];
+  isLoading: boolean;
+  onDrillDown: (tecnicoId: number | "", tipo?: TipoTarea | "") => void;
+}) {
+  const statsPorTecnico = useMemo(() => {
+    const mapa: Record<number | "sin_asignar", { nombre: string; tipos: Partial<Record<TipoTarea, number>>; total: number }> = {
+      sin_asignar: { nombre: "Sin asignar", tipos: {}, total: 0 },
+    };
+    tecnicos.forEach(u => { mapa[u.id] = { nombre: u.nombre, tipos: {}, total: 0 }; });
+    tareas.filter(t => t.estado === "COMPLETADO").forEach(t => {
+      const key = t.tecnico_id ?? "sin_asignar";
+      if (!mapa[key]) return;
+      mapa[key].tipos[t.tipo] = (mapa[key].tipos[t.tipo] ?? 0) + 1;
+      mapa[key].total += 1;
+    });
+    return Object.entries(mapa)
+      .map(([k, v]) => ({ key: k, ...v }))
+      .filter(r => r.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [tareas, tecnicos]);
+
+  const statsPorTipo = useMemo(() => {
+    const mapa: Partial<Record<TipoTarea, number>> = {};
+    tareas.forEach(t => { mapa[t.tipo] = (mapa[t.tipo] ?? 0) + 1; });
+    return (Object.entries(mapa) as [TipoTarea, number][])
+      .map(([tipo, total]) => ({ tipo, label: TIPO_LABEL[tipo], total }))
+      .sort((a, b) => b.total - a.total);
+  }, [tareas]);
+
+  if (isLoading) return (
+    <div style={{ textAlign: "center", padding: "60px 0", color: "#94a3b8", fontSize: "14px" }}>
+      Cargando datos...
+    </div>
+  );
+
+  if (tareas.length === 0) return (
+    <div style={{ textAlign: "center", padding: "60px 0", color: "#94a3b8", fontSize: "14px" }}>
+      No hay tareas para mostrar.
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
+      {/* Totales rápidos */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+        {(["PENDIENTE","ASIGNADO","EN_RUTA","EN_EJECUCION","BLOQUEADO","COMPLETADO"] as EstadoTarea[]).map(e => {
+          const count = tareas.filter(t => t.estado === e).length;
+          if (count === 0) return null;
+          const cfg = ESTADO_CONFIG[e];
+          return (
+            <div key={e} style={{
+              flex: "1 1 100px", minWidth: "100px",
+              background: cfg.bg, border: `1px solid ${cfg.border}`,
+              borderRadius: "10px", padding: "12px 16px",
+              display: "flex", flexDirection: "column", gap: "2px",
+            }}>
+              <span style={{ fontSize: "22px", fontWeight: 700, color: cfg.color }}>{count}</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: cfg.color, textTransform: "uppercase", letterSpacing: "0.04em" }}>{cfg.label}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Grid: por técnico + por tipo */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
+
+        {/* Tareas por técnico */}
+        <div style={{ background: "white", borderRadius: "10px", border: "1px solid #e2e8f0", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", padding: "16px" }}>
+          <h3 style={{ margin: "0 0 14px", fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>
+            Tareas completadas por técnico
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {statsPorTecnico.map(({ key, nombre, tipos, total }) => {
+              const tecId = key === "sin_asignar" ? "" : Number(key);
+              return (
+                <div key={key} style={{
+                  padding: "10px 12px", borderRadius: "8px", background: "#f8fafc", border: "1px solid #e2e8f0",
+                }}>
+                  <button
+                    onClick={() => onDrillDown(tecId)}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      width: "100%", marginBottom: "8px",
+                      background: "none", border: "none", cursor: "pointer", padding: 0,
+                    }}
+                  >
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "#2563eb", textDecoration: "underline", textDecorationStyle: "dotted" }}>{nombre}</span>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#64748b" }}>{total} total</span>
+                  </button>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                    {(Object.entries(tipos) as [TipoTarea, number][])
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([tipo, n]) => (
+                        <button
+                          key={tipo}
+                          onClick={() => onDrillDown(tecId, tipo)}
+                          style={{
+                            padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: 600,
+                            background: `${TIPO_COLORS[tipo]}18`, color: TIPO_COLORS[tipo],
+                            border: `1px solid ${TIPO_COLORS[tipo]}40`,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {TIPO_LABEL[tipo]} · {n}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Distribución por tipo */}
+        <div style={{ background: "white", borderRadius: "10px", border: "1px solid #e2e8f0", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", padding: "16px" }}>
+          <h3 style={{ margin: "0 0 14px", fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>
+            Distribución por tipo
+          </h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={statsPorTipo} layout="vertical" margin={{ left: 8, right: 24, top: 0, bottom: 0 }}>
+              <XAxis type="number" tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} />
+              <YAxis type="category" dataKey="label" width={130} tick={{ fontSize: 11, fill: "#475569" }} />
+              <Tooltip
+                cursor={{ fill: "#f1f5f9" }}
+                contentStyle={{ fontSize: "12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}
+                formatter={(v) => [v, "Tareas"]}
+              />
+              <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                {statsPorTipo.map(({ tipo }) => (
+                  <Cell key={tipo} fill={TIPO_COLORS[tipo]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+      </div>
     </div>
   );
 }
