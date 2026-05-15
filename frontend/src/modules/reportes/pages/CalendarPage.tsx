@@ -28,10 +28,16 @@ const PALETA = [
 ];
 
 const SIN_TECNICO = { bg: "#f1f5f9", border: "#94a3b8", text: "#475569" };
+const COMPLETADO = { bg: "#dcfce7", border: "#16a34a", text: "#15803d" };
 
 function colorTecnico(id: number | null) {
   if (id === null) return SIN_TECNICO;
   return PALETA[id % PALETA.length];
+}
+
+function colorBloque(tarea: Tarea) {
+  if (tarea.estado === "COMPLETADO") return COMPLETADO;
+  return colorTecnico(tarea.tecnico_id);
 }
 
 // ── Config de estado ──────────────────────────────────────────────────────────
@@ -406,7 +412,7 @@ export function CalendarPage({ onSelectTarea }: Props) {
 
                     {/* Bloques de tareas */}
                     {layouts.map(({ tarea, col, totalCols, topPx, heightPx }) => {
-                      const c = colorTecnico(tarea.tecnico_id);
+                      const c = colorBloque(tarea);
                       const anchoBase = 100 / totalCols;
                       const tecNombre = tarea.tecnico_id !== null
                         ? (tecNombreMap.get(tarea.tecnico_id) ?? `#${tarea.tecnico_id}`)
