@@ -24,8 +24,10 @@ sudo systemctl enable wisp-backend
 sudo systemctl restart wisp-backend
 
 echo "=== 5. Copiar config de nginx ==="
-sudo cp nginx.conf /etc/nginx/sites-available/telnet-hillo.com
-sudo ln -sf /etc/nginx/sites-available/telnet-hillo.com /etc/nginx/sites-enabled/
+# Limpia configs legacy si existen
+sudo rm -f /etc/nginx/sites-enabled/telnet-hillo.com /etc/nginx/sites-available/telnet-hillo.com
+# Instala la config como wisp-manager (archivo plano, no symlink — coincide con lo que ya estaba en uso)
+sudo cp nginx.conf /etc/nginx/sites-enabled/wisp-manager
 sudo nginx -t && sudo systemctl reload nginx
 
 echo ""
