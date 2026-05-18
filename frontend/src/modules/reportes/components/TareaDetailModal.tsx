@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { useTarea, useTareaTransiciones, useTareaEventos, useTareaFotos } from "../hooks/useTareas";
 import { useTransicionarEstado, useSubirFoto, useActualizarTarea, useAsignarTecnico } from "../hooks/useTareaActions";
-import { useGeolocation } from "../hooks/useGeolocation";
 import { useClientDetail } from "../../clients/hooks/useClientDetail";
 import apiClient from "../../../core/api/apiClient";
 import { vincularServicio } from "../api/reportes.api";
@@ -83,7 +82,6 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
   const { mutate: actualizar, isPending: actualizando } = useActualizarTarea(tareaId);
   const { mutate: asignar, isPending: asignando } = useAsignarTecnico(tareaId);
   const { data: fotos = [] } = useTareaFotos(tareaId);
-  const geo = useGeolocation();
   const { data: cliente } = useClientDetail(tarea?.id_servicio ?? null);
 
   const { data: usuarios = [] } = useQuery<UsuarioItem[]>({
@@ -101,10 +99,13 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
   const [comentario, setComentario] = useState("");
   const [errorComentario, setErrorComentario] = useState(false);
 
-  // Estado de edición
+  // Estado de edición (descripción / prioridad)
   const [modoEdicion, setModoEdicion] = useState(false);
   const [editDesc, setEditDesc]       = useState("");
   const [editPrio, setEditPrio]       = useState<PrioridadTarea>("MEDIA");
+
+  // Estado de edición de horario (independiente)
+  const [modoEditarHorario, setModoEditarHorario] = useState(false);
   const [editFecha, setEditFecha]     = useState("");      // YYYY-MM-DD
   const [editHoraInicio, setEditHoraInicio] = useState(""); // HH:MM
   const [editHoraFin, setEditHoraFin]       = useState(""); // HH:MM
@@ -118,7 +119,22 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
     if (!tarea) return;
     setEditDesc(tarea.descripcion);
     setEditPrio(tarea.prioridad as PrioridadTarea);
-    // Prefill horario si existe (formato ISO -> YYYY-MM-DD + HH:MM)
+    setEditError("");
+    setModoEdicion(true);
+  }
+
+  function guardarEdicion() {
+    actualizar(
+      {
+        descripcion: editDesc.trim() || undefined,
+        prioridad: editPrio,
+      },
+      { onSuccess: () => setModoEdicion(false) }
+    );
+  }
+
+  function abrirEdicionHorario() {
+    if (!tarea) return;
     if (tarea.fecha_inicio) {
       const ini = new Date(tarea.fecha_inicio);
       setEditFecha(ini.toISOString().slice(0, 10));
@@ -134,12 +150,11 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
       setEditHoraFin("");
     }
     setEditError("");
-    setModoEdicion(true);
+    setModoEditarHorario(true);
   }
 
-  function guardarEdicion() {
+  function guardarHorario() {
     setEditError("");
-    // Validación atómica del horario (igual que en NuevaTareaModal)
     const horarioParcial = (editFecha || editHoraInicio || editHoraFin) && !(editFecha && editHoraInicio && editHoraFin);
     if (horarioParcial) {
       setEditError("Completa fecha, hora de inicio y hora de fin, o quita el horario.");
@@ -152,13 +167,15 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
     const fecha_inicio = editFecha && editHoraInicio ? `${editFecha}T${editHoraInicio}:00` : null;
     const fecha_fin    = editFecha && editHoraFin    ? `${editFecha}T${editHoraFin}:00`    : null;
     actualizar(
-      {
-        descripcion: editDesc.trim() || undefined,
-        prioridad: editPrio,
-        fecha_inicio,
-        fecha_fin,
-      },
-      { onSuccess: () => setModoEdicion(false) }
+      { fecha_inicio, fecha_fin },
+      { onSuccess: () => setModoEditarHorario(false) }
+    );
+  }
+
+  function quitarHorario() {
+    actualizar(
+      { fecha_inicio: null, fecha_fin: null },
+      { onSuccess: () => setModoEditarHorario(false) }
     );
   }
 
@@ -171,17 +188,9 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
   }
 
   function seleccionarTransicion(estado: EstadoTarea) {
-    if (estadoPendiente === estado) {
-      setEstadoPendiente(null);
-      setComentario("");
-      setErrorComentario(false);
-      geo.clear();
-    } else {
-      setEstadoPendiente(estado);
-      setComentario("");
-      setErrorComentario(false);
-      geo.clear();
-    }
+    setEstadoPendiente(estadoPendiente === estado ? null : estado);
+    setComentario("");
+    setErrorComentario(false);
   }
 
   function confirmarTransicion() {
@@ -194,15 +203,12 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
       {
         estado_nuevo: estadoPendiente,
         comentario:   comentario.trim() || null,
-        lat_evento:   geo.lat,
-        lng_evento:   geo.lng,
       },
       {
         onSuccess: () => {
           setEstadoPendiente(null);
           setComentario("");
           setErrorComentario(false);
-          geo.clear();
         },
       }
     );
@@ -345,63 +351,6 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                         );
                       })}
                     </div>
-                    {/* Horario programado */}
-                    <p style={{ margin: "10px 0 6px", fontSize: "10px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                      Horario programado
-                    </p>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <label style={miniLabel}>Fecha</label>
-                        <input
-                          type="date"
-                          value={editFecha}
-                          onChange={e => setEditFecha(e.target.value)}
-                          style={miniInput}
-                        />
-                      </div>
-                      <div>
-                        <label style={miniLabel}>Inicio</label>
-                        <input
-                          type="time"
-                          value={editHoraInicio}
-                          onChange={e => setEditHoraInicio(e.target.value)}
-                          style={miniInput}
-                        />
-                      </div>
-                      <div>
-                        <label style={miniLabel}>Fin</label>
-                        <input
-                          type="time"
-                          value={editHoraFin}
-                          onChange={e => setEditHoraFin(e.target.value)}
-                          style={miniInput}
-                        />
-                      </div>
-                      {(editFecha || editHoraInicio || editHoraFin) && (
-                        <button
-                          type="button"
-                          onClick={() => { setEditFecha(""); setEditHoraInicio(""); setEditHoraFin(""); }}
-                          style={{
-                            gridColumn: "1 / -1", padding: "3px", fontSize: "11px",
-                            background: "none", border: "none", color: "#dc2626",
-                            cursor: "pointer", textAlign: "right",
-                          }}
-                        >
-                          Quitar horario
-                        </button>
-                      )}
-                    </div>
-
-                    {editError && (
-                      <p style={{
-                        margin: "8px 0 0", padding: "6px 10px", borderRadius: "6px",
-                        background: "#fef2f2", border: "1px solid #fecaca",
-                        fontSize: "12px", color: "#dc2626",
-                      }}>
-                        {editError}
-                      </p>
-                    )}
-
                     <div style={{ display: "flex", gap: "6px", marginTop: "10px" }}>
                       <button onClick={() => setModoEdicion(false)} disabled={actualizando} style={{
                         flex: 1, padding: "6px", borderRadius: "6px", fontSize: "12px",
@@ -465,13 +414,65 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                   )}
 
                   {/* Horario programado */}
-                  {(tarea.fecha_inicio || tarea.fecha_fin) && (
+                  {(esAdmin || tarea.fecha_inicio || tarea.fecha_fin) && (
                     <div style={{ gridColumn: "1 / -1" }}>
-                      <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Horario programado</p>
-                      <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>
-                        {tarea.fecha_inicio ? fmtDateShort(tarea.fecha_inicio) : "—"}
-                        {tarea.fecha_fin ? ` → ${fmtDateShort(tarea.fecha_fin)}` : ""}
-                      </p>
+                      <p style={{ margin: "0 0 4px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Horario programado</p>
+                      {modoEditarHorario ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <label style={miniLabel}>Fecha</label>
+                            <input type="date" value={editFecha} onChange={e => setEditFecha(e.target.value)} style={miniInput} />
+                          </div>
+                          <div>
+                            <label style={miniLabel}>Inicio</label>
+                            <input type="time" value={editHoraInicio} onChange={e => setEditHoraInicio(e.target.value)} style={miniInput} />
+                          </div>
+                          <div>
+                            <label style={miniLabel}>Fin</label>
+                            <input type="time" value={editHoraFin} onChange={e => setEditHoraFin(e.target.value)} style={miniInput} />
+                          </div>
+                          {editError && (
+                            <p style={{
+                              gridColumn: "1 / -1", margin: "4px 0 0", padding: "6px 10px", borderRadius: "6px",
+                              background: "#fef2f2", border: "1px solid #fecaca", fontSize: "12px", color: "#dc2626",
+                            }}>{editError}</p>
+                          )}
+                          <div style={{ gridColumn: "1 / -1", display: "flex", gap: "6px", marginTop: "4px" }}>
+                            <button onClick={guardarHorario} disabled={actualizando} style={{
+                              flex: 1, padding: "6px", borderRadius: "6px", fontSize: "12px", fontWeight: 700, border: "none",
+                              background: actualizando ? "#cbd5e1" : "#2563eb", color: "white",
+                              cursor: actualizando ? "not-allowed" : "pointer",
+                            }}>{actualizando ? "..." : "Guardar"}</button>
+                            <button onClick={() => setModoEditarHorario(false)} disabled={actualizando} style={{
+                              padding: "6px 10px", borderRadius: "6px", fontSize: "12px",
+                              border: "1px solid #e2e8f0", background: "white", color: "#64748b", cursor: "pointer",
+                            }}>Cancelar</button>
+                            {(tarea.fecha_inicio || tarea.fecha_fin) && (
+                              <button onClick={quitarHorario} disabled={actualizando} style={{
+                                padding: "6px 10px", borderRadius: "6px", fontSize: "12px",
+                                border: "1px solid #fecaca", background: "white", color: "#dc2626", cursor: "pointer",
+                              }}>Quitar horario</button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <p style={{ margin: 0, fontSize: "13px", color: tarea.fecha_inicio ? "#1e293b" : "#94a3b8", fontWeight: 500, fontStyle: tarea.fecha_inicio ? "normal" : "italic" }}>
+                            {tarea.fecha_inicio
+                              ? `${fmtDateShort(tarea.fecha_inicio)}${tarea.fecha_fin ? ` → ${fmtDateShort(tarea.fecha_fin)}` : ""}`
+                              : "Sin horario asignado"}
+                          </p>
+                          {esAdmin && (
+                            <button onClick={abrirEdicionHorario} style={{
+                              padding: "2px 8px", borderRadius: "5px", fontSize: "11px",
+                              border: "1px solid #e2e8f0", background: "transparent",
+                              color: "#64748b", cursor: "pointer",
+                            }}>
+                              {tarea.fecha_inicio ? "Cambiar" : "Agregar"}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -527,21 +528,6 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                           </button>
                         )}
                       </div>
-                    )}
-                  </div>
-                  {/* Fila de ubicación (ocupa las 2 columnas) */}
-                  <div style={{ gridColumn: "1 / -1" }}>
-                    <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Ubicación</p>
-                    {tarea.latitud && tarea.longitud ? (
-                      <a
-                        href={`https://www.google.com/maps?q=${tarea.latitud},${tarea.longitud}`}
-                        target="_blank" rel="noreferrer"
-                        style={{ fontSize: "13px", color: "#2563eb", fontWeight: 500 }}
-                      >
-                        📍 {tarea.latitud.toFixed(5)}, {tarea.longitud.toFixed(5)}
-                      </a>
-                    ) : (
-                      <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>—</p>
                     )}
                   </div>
                 </div>
@@ -616,44 +602,6 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                             : "El comentario es obligatorio para completar una tarea."}
                         </p>
                       )}
-
-                      {/* Captura de ubicación en la transición */}
-                      <div style={{ marginTop: "10px" }}>
-                        {geo.lat && geo.lng ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <a
-                              href={`https://www.google.com/maps?q=${geo.lat},${geo.lng}`}
-                              target="_blank" rel="noreferrer"
-                              style={{ fontSize: "12px", color: "#16a34a", fontWeight: 600 }}
-                            >
-                              📍 {geo.lat.toFixed(5)}, {geo.lng.toFixed(5)}
-                            </a>
-                            <button
-                              type="button" onClick={geo.clear}
-                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: "#94a3b8" }}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={geo.capture}
-                            disabled={geo.loading}
-                            style={{
-                              padding: "5px 12px", borderRadius: "6px", fontSize: "12px",
-                              border: "1px dashed #cbd5e1", background: "#f8fafc",
-                              color: geo.loading ? "#94a3b8" : "#475569",
-                              cursor: geo.loading ? "not-allowed" : "pointer",
-                            }}
-                          >
-                            {geo.loading ? "Obteniendo ubicación..." : "📍 Registrar mi ubicación"}
-                          </button>
-                        )}
-                        {geo.error && (
-                          <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#dc2626" }}>{geo.error}</p>
-                        )}
-                      </div>
 
                       <div style={{ display: "flex", gap: "8px", marginTop: "10px", justifyContent: "flex-end" }}>
                         <button
@@ -761,15 +709,6 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                             }}>
                               "{ev.comentario}"
                             </p>
-                          )}
-                          {ev.lat_evento && ev.lng_evento && (
-                            <a
-                              href={`https://www.google.com/maps?q=${ev.lat_evento},${ev.lng_evento}`}
-                              target="_blank" rel="noreferrer"
-                              style={{ fontSize: "11px", color: "#2563eb", marginTop: "2px", display: "inline-block" }}
-                            >
-                              📍 Ver en mapa
-                            </a>
                           )}
                         </div>
                       </div>

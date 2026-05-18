@@ -1,6 +1,11 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import {
+  HardHat, Wrench, Package, PlugZap, Truck, ClipboardList,
+  Clock, User as UserIcon,
+} from "lucide-react";
+import type { ComponentType } from "react";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { useTareas } from "../hooks/useTareas";
 import { useDebounce } from "../../../shared/hooks/useDebounce";
@@ -38,6 +43,22 @@ const PRIORIDAD_CONFIG: Record<PrioridadTarea, { label: string; color: string }>
   ALTA:  { label: "Alta",  color: "#dc2626" },
   MEDIA: { label: "Media", color: "#d97706" },
   BAJA:  { label: "Baja",  color: "#16a34a" },
+};
+
+type IconType = ComponentType<{ size?: number; color?: string }>;
+const TIPO_CONFIG: Record<TipoTarea, { color: string; icon: IconType }> = {
+  INSTALACION:      { color: "#2563eb", icon: HardHat },
+  SERVICIO:         { color: "#d97706", icon: Wrench },
+  RECOLECCION:      { color: "#7c3aed", icon: Package },
+  RECONEXION:       { color: "#16a34a", icon: PlugZap },
+  CAMBIO_DOMICILIO: { color: "#0891b2", icon: Truck },
+  TRABAJO_GENERAL:  { color: "#64748b", icon: ClipboardList },
+  // Legacy
+  FALLA_RED:        { color: "#94a3b8", icon: ClipboardList },
+  SOPORTE_TECNICO:  { color: "#94a3b8", icon: ClipboardList },
+  MANTENIMIENTO:    { color: "#94a3b8", icon: ClipboardList },
+  CAMBIO_PLAN:      { color: "#94a3b8", icon: ClipboardList },
+  REUBICACION:      { color: "#94a3b8", icon: ClipboardList },
 };
 
 const ESTADOS_FILTRO: { value: EstadoTarea | ""; label: string }[] = [
@@ -172,6 +193,12 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
       if (!matchDesc && !matchId) return false;
     }
     return true;
+  }).sort((a, b) => {
+    // Sin horario primero, luego por fecha_inicio descendente.
+    if (!a.fecha_inicio && !b.fecha_inicio) return 0;
+    if (!a.fecha_inicio) return -1;
+    if (!b.fecha_inicio) return 1;
+    return b.fecha_inicio.localeCompare(a.fecha_inicio);
   });
 
   return (
@@ -437,7 +464,13 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
       {tareas && tareas.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {tareas.map(tarea => (
-            <TareaCard key={tarea.id} tarea={tarea} busqueda={debouncedBusqueda} onClick={() => onSelectTarea(tarea.id)} />
+            <TareaCard
+              key={tarea.id}
+              tarea={tarea}
+              busqueda={debouncedBusqueda}
+              tecnicoNombre={tarea.tecnico_id != null ? (usuarios.find(u => u.id === tarea.tecnico_id)?.nombre ?? null) : null}
+              onClick={() => onSelectTarea(tarea.id)}
+            />
           ))}
         </div>
       )}
@@ -624,9 +657,11 @@ function resaltarTexto(texto: string, busqueda: string): React.ReactNode {
   );
 }
 
-function TareaCard({ tarea, busqueda = "", onClick }: { tarea: Tarea; busqueda?: string; onClick: () => void }) {
+function TareaCard({ tarea, busqueda = "", tecnicoNombre, onClick }: { tarea: Tarea; busqueda?: string; tecnicoNombre: string | null; onClick: () => void }) {
   const estado = ESTADO_CONFIG[tarea.estado];
   const prioridad = PRIORIDAD_CONFIG[tarea.prioridad];
+  const tipo = TIPO_CONFIG[tarea.tipo];
+  const TipoIcon = tipo.icon;
 
   return (
     <button
@@ -634,17 +669,21 @@ function TareaCard({ tarea, busqueda = "", onClick }: { tarea: Tarea; busqueda?:
       style={{
         display: "block", width: "100%", textAlign: "left",
         background: "white", borderRadius: "10px",
-        border: "1px solid #e2e8f0", boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+        border: "1px solid #e2e8f0",
+        borderLeft: `4px solid ${tipo.color}`,
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
         padding: "14px 16px", cursor: "pointer",
         transition: "box-shadow 0.15s, border-color 0.15s",
       }}
       onMouseEnter={e => {
         (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
         (e.currentTarget as HTMLButtonElement).style.borderColor = "#94a3b8";
+        (e.currentTarget as HTMLButtonElement).style.borderLeftColor = tipo.color;
       }}
       onMouseLeave={e => {
         (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 1px 2px rgba(0,0,0,0.04)";
         (e.currentTarget as HTMLButtonElement).style.borderColor = "#e2e8f0";
+        (e.currentTarget as HTMLButtonElement).style.borderLeftColor = tipo.color;
       }}
     >
       {/* Fila superior: estado + prioridad */}
@@ -657,18 +696,19 @@ function TareaCard({ tarea, busqueda = "", onClick }: { tarea: Tarea; busqueda?:
         }}>
           {estado.label}
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: prioridad.color, display: "inline-block", flexShrink: 0 }} />
-            <span style={{ fontSize: "11px", color: prioridad.color, fontWeight: 600 }}>{prioridad.label}</span>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+          <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: prioridad.color, display: "inline-block", flexShrink: 0 }} />
+          <span style={{ fontSize: "11px", color: prioridad.color, fontWeight: 600 }}>{prioridad.label}</span>
         </div>
       </div>
 
-      {/* Tipo */}
-      <p style={{ margin: "0 0 4px", fontSize: "11px", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-        {TIPO_LABEL[tarea.tipo]}
-      </p>
+      {/* Tipo con icono */}
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", margin: "0 0 4px" }}>
+        <TipoIcon size={13} color={tipo.color} />
+        <p style={{ margin: 0, fontSize: "11px", fontWeight: 600, color: tipo.color, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          {TIPO_LABEL[tarea.tipo]}
+        </p>
+      </div>
 
       {/* Descripción */}
       <p style={{
@@ -679,17 +719,17 @@ function TareaCard({ tarea, busqueda = "", onClick }: { tarea: Tarea; busqueda?:
         {resaltarTexto(tarea.descripcion, busqueda)}
       </p>
 
-      {/* Fila inferior: ID servicio + fecha */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: "12px", color: "#64748b" }}>
-          {tarea.id_servicio != null ? (
-            <>Servicio <strong style={{ color: "#334155" }}>{resaltarTexto(`#${tarea.id_servicio}`, busqueda)}</strong></>
-          ) : (
-            <span style={{ fontStyle: "italic" }}>Sin servicio asignado</span>
-          )}
+      {/* Footer: horario programado y, debajo, técnico asignado */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: tarea.fecha_inicio ? "#334155" : "#94a3b8" }}>
+          <Clock size={12} color={tarea.fecha_inicio ? "#64748b" : "#cbd5e1"} />
+          {tarea.fecha_inicio
+            ? formatHorario(tarea.fecha_inicio, tarea.fecha_fin)
+            : <span style={{ fontStyle: "italic" }}>Sin horario</span>}
         </span>
-        <span style={{ fontSize: "11px", color: "#94a3b8" }}>
-          {formatFecha(tarea.fecha_creada)}
+        <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: tecnicoNombre ? "#334155" : "#94a3b8" }}>
+          <UserIcon size={12} color={tecnicoNombre ? "#64748b" : "#cbd5e1"} />
+          {tecnicoNombre ?? <span style={{ fontStyle: "italic" }}>Sin asignar</span>}
         </span>
       </div>
     </button>
@@ -698,9 +738,14 @@ function TareaCard({ tarea, busqueda = "", onClick }: { tarea: Tarea; busqueda?:
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function formatFecha(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+function formatHorario(inicioIso: string, finIso: string | null): string {
+  const ini = new Date(inicioIso);
+  const dia = ini.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+  const hi = ini.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (!finIso) return `${dia}, ${hi}`;
+  const fin = new Date(finIso);
+  const hf = fin.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${dia}, ${hi}–${hf}`;
 }
 
 const labelStyle: React.CSSProperties = {
