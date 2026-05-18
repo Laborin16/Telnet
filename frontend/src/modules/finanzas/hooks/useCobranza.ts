@@ -116,6 +116,7 @@ export interface AlertasCobranza {
   dia_2: GrupoAlerta;
   dia_3: GrupoAlerta;
   mas_de_3: GrupoAlerta;
+  recoleccion: GrupoAlerta;
 }
 
 export function useAlertasCobranza() {

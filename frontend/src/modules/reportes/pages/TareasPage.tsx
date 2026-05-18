@@ -5,6 +5,7 @@ import { useAuth } from "../../auth/hooks/useAuth";
 import { useTareas } from "../hooks/useTareas";
 import { useDebounce } from "../../../shared/hooks/useDebounce";
 import apiClient from "../../../core/api/apiClient";
+import { RecoleccionTab } from "../../finanzas/components/RecoleccionTab";
 import type { EstadoTarea, PrioridadTarea, Tarea, TipoTarea } from "../types/reportes";
 
 // ── Etiquetas y colores ────────────────────────────────────────────────────────
@@ -76,7 +77,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
   const { user } = useAuth();
   const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
   const esVentas = user?.rol === "ventas";
-  const [subTab, setSubTab]                     = useState<"lista" | "dashboard">("lista");
+  const [subTab, setSubTab]                     = useState<"lista" | "dashboard" | "recoleccion">("lista");
   const [estadoFiltro, setEstadoFiltro]         = useState<EstadoTarea | "">("");
   const [prioridadFiltro, setPrioridadFiltro]   = useState<PrioridadTarea | "">("");
   const [tecnicoFiltro, setTecnicoFiltro]       = useState<number | "">("");
@@ -143,7 +144,21 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
     staleTime: 60_000,
     enabled: puedeGestionar,
   });
-  const tecnicosActivos = usuarios.filter(u => u.activo && u.rol === "tecnico");
+  const tecnicosActivos = useMemo(() => {
+    // Admin/supervisor: lista completa desde la API.
+    // Tecnico: solo su propio usuario (para que el dashboard "Por técnico" muestre su fila).
+    if (puedeGestionar) return usuarios.filter(u => u.activo && u.rol === "tecnico");
+    if (user?.rol === "tecnico") {
+      return [{
+        id: user.id,
+        nombre: user.nombre,
+        username: user.username ?? "",
+        activo: true,
+        rol: "tecnico",
+      } as UsuarioItem];
+    }
+    return [];
+  }, [usuarios, puedeGestionar, user]);
 
   // Filtrado client-side por estado, prioridad, tipo y búsqueda
   const tareas = (todasLasTareas ?? []).filter(t => {
@@ -166,14 +181,17 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         {!esVentas ? (
           <div style={{ display: "flex", gap: "4px", background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", padding: "3px" }}>
-            {(["lista", "dashboard"] as const).map(t => (
+            {(puedeGestionar
+              ? (["lista", "dashboard", "recoleccion"] as const)
+              : (["lista", "dashboard"] as const)
+            ).map(t => (
               <button key={t} onClick={() => setSubTab(t)} style={{
                 padding: "5px 16px", borderRadius: "6px", border: "none",
                 background: subTab === t ? "#2563eb" : "transparent",
                 color: subTab === t ? "white" : "#64748b",
                 fontSize: "13px", fontWeight: subTab === t ? 600 : 400, cursor: "pointer",
               }}>
-                {t === "lista" ? "Lista" : "Dashboard"}
+                {t === "lista" ? "Lista" : t === "dashboard" ? "Dashboard" : "Recolección"}
               </button>
             ))}
           </div>
@@ -252,6 +270,9 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
       )}
 
       {/* ── Vista lista ───────────────────────────────── */}
+      {/* ── Vista recolección (solo admin/supervisor) ──────────────── */}
+      {subTab === "recoleccion" && puedeGestionar && <RecoleccionTab />}
+
       {subTab === "lista" && <>
 
 

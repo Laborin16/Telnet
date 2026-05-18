@@ -78,7 +78,7 @@ async def actualizar_tarea(
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
-    _requerir_admin(usuario)
+    _requerir_admin_estricto(usuario)
     try:
         return await service.actualizar_tarea(tarea_id, datos, usuario, db)
     except ValueError as e:
@@ -94,7 +94,7 @@ async def asignar_tecnico(
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
-    _requerir_admin(usuario)
+    _requerir_admin_estricto(usuario)
     try:
         return await service.asignar_tecnico(tarea_id, datos, usuario, db)
     except ValueError as e:
@@ -256,6 +256,14 @@ def _requerir_admin(usuario: dict) -> None:
     rol = usuario.get("rol")
     if rol not in ("administrador", "supervisor") and not usuario.get("es_admin", False):
         raise HTTPException(status_code=403, detail="Solo administradores o supervisores pueden realizar esta acción")
+
+
+def _requerir_admin_estricto(usuario: dict) -> None:
+    """Solo administrador — no acepta supervisor. Para acciones que solo admin debe realizar."""
+    _requerir_autenticado(usuario)
+    rol = usuario.get("rol")
+    if rol != "administrador" and not usuario.get("es_admin", False):
+        raise HTTPException(status_code=403, detail="Solo administradores pueden realizar esta acción")
 
 
 def _requerir_puede_crear(usuario: dict, tipo: TipoTarea) -> None:

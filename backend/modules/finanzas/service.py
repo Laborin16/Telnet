@@ -257,7 +257,7 @@ async def get_alertas_cobranza() -> dict:
                             continue
                 pmap[srv_id] = fp_date if fp_date else fv
 
-    grupos: dict[str, list] = {"hoy": [], "dia_1": [], "dia_2": [], "dia_3": [], "mas_de_3": []}
+    grupos: dict[str, list] = {"hoy": [], "dia_1": [], "dia_2": [], "dia_3": [], "mas_de_3": [], "recoleccion": []}
 
     for srv_id, fv in vmap.items():
         # Usar fecha_pago como referencia; si no existe, caer a fecha_vencimiento
@@ -290,17 +290,23 @@ async def get_alertas_cobranza() -> dict:
             grupos["dia_3"].append(item)
         elif dias <= 7:
             grupos["mas_de_3"].append(item)
+        else:
+            # 8+ días: bucket interno usado solo por el resumen de WhatsApp
+            # (aviso de recolección). No se muestra en la tabla de cobranza.
+            grupos["recoleccion"].append(item)
+        # Nota: día 7 queda en "mas_de_3"; recolección empieza el día 8.
 
     for g in grupos.values():
         g.sort(key=lambda x: x["nombre"])
 
     return {
         "total": sum(len(v) for v in grupos.values()),
-        "hoy":       {"count": len(grupos["hoy"]),       "items": grupos["hoy"]},
-        "dia_1":     {"count": len(grupos["dia_1"]),     "items": grupos["dia_1"]},
-        "dia_2":     {"count": len(grupos["dia_2"]),     "items": grupos["dia_2"]},
-        "dia_3":     {"count": len(grupos["dia_3"]),     "items": grupos["dia_3"]},
-        "mas_de_3":  {"count": len(grupos["mas_de_3"]), "items": grupos["mas_de_3"]},
+        "hoy":         {"count": len(grupos["hoy"]),         "items": grupos["hoy"]},
+        "dia_1":       {"count": len(grupos["dia_1"]),       "items": grupos["dia_1"]},
+        "dia_2":       {"count": len(grupos["dia_2"]),       "items": grupos["dia_2"]},
+        "dia_3":       {"count": len(grupos["dia_3"]),       "items": grupos["dia_3"]},
+        "mas_de_3":    {"count": len(grupos["mas_de_3"]),    "items": grupos["mas_de_3"]},
+        "recoleccion": {"count": len(grupos["recoleccion"]), "items": grupos["recoleccion"]},
     }
 
 async def get_log_cobranza(fecha: str | None, db: AsyncSession) -> dict:

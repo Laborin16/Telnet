@@ -113,7 +113,7 @@ export function UsuariosPage() {
               </tr>
             </thead>
             <tbody>
-              {usuarios.map(u => (
+              {[...usuarios].sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })).map(u => (
                 <tr key={u.id} style={{ borderBottom: "1px solid #f1f5f9", opacity: u.activo ? 1 : 0.55 }}>
                   <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a" }}>{u.nombre}</td>
                   <td style={{ padding: "12px 16px", color: "#64748b", fontFamily: "monospace", fontSize: "12px" }}>{u.username}</td>

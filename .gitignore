@@ -27,6 +27,8 @@ frontend/.env.*
 # Contexto local (no va a git)
 CLAUDE.md
 CLAUDE*.md
+claude.md
+claude*.md
 
 # IDEs
 .vscode/

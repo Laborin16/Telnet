@@ -43,7 +43,7 @@ async def enviar_individual(
     usuario: dict = Depends(get_usuario),
 ):
     requerir_autenticado(usuario)
-    dias_key = body.dias_vencido if body.dias_vencido in TEMPLATES else 7 if body.dias_vencido > 7 else None
+    dias_key = body.dias_vencido if body.dias_vencido in TEMPLATES else 8 if body.dias_vencido > 8 else None
     if dias_key is None:
         raise HTTPException(status_code=400, detail="No hay plantilla para este número de días.")
 
@@ -120,46 +120,25 @@ def _fecha_pago_date(f: dict):
 async def resumen_recordatorios(usuario: dict = Depends(get_usuario)):
     requerir_autenticado(usuario)
     from datetime import date
-    today = date.today()
+    from modules.finanzas.service import get_alertas_cobranza
 
-    facturas_data, clientes_data = await asyncio.gather(
-        wisphub_client.get("/api/facturas/", params={"page_size": 1000}),
-        wisphub_client.get("/api/clientes/", params={"page_size": 1000}),
-    )
-    clientes_map = _build_clientes_map(clientes_data)
-
-    # Agrupar por servicio — igual que cobranza: una entrada por cliente,
-    # la factura más urgente (menor fecha_pago).
-    srv_dias: dict[int, int] = {}
-    for f in facturas_data.get("results", []):
-        if f.get("estado") != "Pendiente de Pago":
-            continue
-        _enrich_factura(f, clientes_map)
-        cliente = f.get("cliente") or {}
-        srv_id = cliente.get("id_servicio")
-        if not srv_id:
-            continue
-        fecha_ref = _fecha_pago_date(f)
-        if fecha_ref is None:
-            continue
-        dias = (today - fecha_ref).days
-        if dias < 0:
-            continue
-        # Conservar el más urgente (más días vencido) por servicio
-        if srv_id not in srv_dias or dias > srv_dias[srv_id]:
-            srv_dias[srv_id] = dias
+    # Usamos la misma fuente que las tarjetas de cobranza para garantizar
+    # que los conteos coincidan exactamente entre el dashboard y el modal.
+    alertas = await get_alertas_cobranza()
 
     conteos = {0: 0, 1: 0, 2: 0, 3: 0, "cortado": 0, 7: 0}
-    for dias in srv_dias.values():
-        if dias <= 3:
-            conteos[dias] += 1
-        elif dias <= 6:
-            conteos["cortado"] += 1
-        else:
-            conteos[7] += 1
+    for grupo in ("hoy", "dia_1", "dia_2", "dia_3", "mas_de_3", "recoleccion"):
+        for item in alertas[grupo]["items"]:
+            d = item["dias_vencido"]
+            if d <= 3:
+                conteos[d] += 1
+            elif d <= 7:
+                conteos["cortado"] += 1
+            else:
+                conteos[7] += 1
 
     return {
-        "fecha": today.isoformat(),
+        "fecha": date.today().isoformat(),
         "suspension_habilitada": SUSPENSION_HABILITADA,
         "resumen": [
             {"dia": 0, "label": "Vencen hoy",           "plantilla": "telnet_recordatorio_pago",  "count": conteos[0]},

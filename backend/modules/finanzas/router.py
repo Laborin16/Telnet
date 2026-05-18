@@ -347,4 +347,73 @@ async def estado_equipo(
             "nombre_tecnico": data.get("nombre_tecnico"),
         },
     )
+
+    # Si se asignó un técnico, garantizamos que exista una tarea de RECOLECCION
+    # activa para este servicio. Si no existe → la creamos; si existe pero con
+    # otro técnico → la reasignamos.
+    id_tecnico = data.get("id_tecnico")
+    if id_tecnico:
+        try:
+            await _sincronizar_tarea_recoleccion(
+                id_servicio=id_servicio,
+                tecnico_id=int(id_tecnico),
+                notas=data.get("notas"),
+                usuario=usuario,
+                db=db,
+            )
+        except Exception as e:
+            # No queremos que falle el guardado del estado por un fallo de tarea
+            print(f"[recoleccion → tarea] error sincronizando tarea: {e}")
+
     return result
+
+
+async def _sincronizar_tarea_recoleccion(
+    id_servicio: int,
+    tecnico_id: int,
+    notas: str | None,
+    usuario: dict,
+    db: AsyncSession,
+) -> None:
+    """Garantiza que exista una tarea activa de tipo RECOLECCION para el servicio.
+
+    - Si no hay ninguna en estado no-terminal → crea una.
+    - Si ya hay una y el técnico cambió → la reasigna.
+    """
+    from sqlalchemy import select
+    from modules.reportes import service as reportes_service
+    from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
+    from modules.reportes.models import Tarea
+    from modules.reportes.schemas import AsignarTecnico, TareaCreate
+
+    ESTADOS_TERMINALES = (EstadoTarea.COMPLETADO, EstadoTarea.CANCELADO)
+
+    result = await db.execute(
+        select(Tarea)
+        .where(
+            Tarea.id_servicio == id_servicio,
+            Tarea.tipo == TipoTarea.RECOLECCION,
+            Tarea.estado.notin_([e.value for e in ESTADOS_TERMINALES]),
+        )
+        .order_by(Tarea.fecha_creada.desc())
+    )
+    tarea_existente = result.scalars().first()
+
+    if tarea_existente is None:
+        # Crear nueva tarea
+        datos = TareaCreate(
+            id_servicio=id_servicio,
+            tipo=TipoTarea.RECOLECCION,
+            prioridad=PrioridadTarea.MEDIA,
+            descripcion=(notas or "Recolección de equipo programada desde finanzas.").strip(),
+            tecnico_id=tecnico_id,
+        )
+        await reportes_service.crear_tarea(datos, usuario, db)
+    elif tarea_existente.tecnico_id != tecnico_id:
+        # Reasignar técnico
+        await reportes_service.asignar_tecnico(
+            tarea_existente.id,
+            AsignarTecnico(tecnico_id=tecnico_id),
+            usuario,
+            db,
+        )

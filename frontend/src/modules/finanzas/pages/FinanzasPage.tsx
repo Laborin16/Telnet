@@ -6,9 +6,7 @@ import { useAlertasCobranza, useHistorialPagos } from "../hooks/useCobranza";
 import type { ClienteAlerta } from "../hooks/useCobranza";
 import { KPICard } from "../components/KPICard";
 import { PagoModal } from "../components/PagoModal";
-import { useRecoleccion } from "../hooks/useCobranza";
-import type { ItemRecoleccion } from "../hooks/useCobranza";
-import { RecoleccionModal } from "../components/RecoleccionModal";
+import { RecoleccionTab } from "../components/RecoleccionTab";
 import { ObservacionCell } from "../components/ObservacionCell";
 import { useObservaciones } from "../hooks/useCobranza";
 import { WhatsAppModal } from "../components/WhatsAppModal";
@@ -95,11 +93,8 @@ export function FinanzasPage() {
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [selectedDateFin, setSelectedDateFin] = useState<string>(today);
   const [clientePago, setClientePago] = useState<ClientePagoType | null>(null);
-  const [itemRecoleccion, setItemRecoleccion] = useState<ItemRecoleccion | null>(null);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
   const [showReporte, setShowReporte] = useState(false);
-  const [filtrosRecoleccion, setFiltrosRecoleccion] = useState<Set<string>>(new Set());
-  const { data: recoleccion, isLoading: recoleccionLoading } = useRecoleccion();
 
   // Búsqueda vista semanal
   const [searchSemana, setSearchSemana] = useState("");
@@ -116,49 +111,10 @@ export function FinanzasPage() {
   const [filtroEstadoCobranza, setFiltroEstadoCobranza] = useState<Set<string>>(new Set());
   const dSearchCobranza = useDebounce(searchCobranza, 200);
 
-  // Búsqueda recolección
-  const [searchRecoleccion, setSearchRecoleccion] = useState("");
-  const dSearchRecoleccion = useDebounce(searchRecoleccion, 200);
-
   // Historial de pagos
   const [searchHistorial, setSearchHistorial] = useState("");
   const dSearchHistorial = useDebounce(searchHistorial, 300);
   const { data: historial, isLoading: historialLoading } = useHistorialPagos(dSearchHistorial);
-
-  const toggleFiltroRecoleccion = (key: string) => {
-    setFiltrosRecoleccion(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const itemsRecoleccionFiltrados = useMemo(() => {
-    if (!recoleccion?.items) return [];
-    const ORDEN_ESTADO: Record<string, number> = {
-      recuperado: 0, antena_no_recuperada: 1, modem_no_recuperado: 2, nada_recuperado: 3,
-    };
-    let items = recoleccion.items;
-    if (dSearchRecoleccion) {
-      const q = dSearchRecoleccion.toLowerCase();
-      items = items.filter(i =>
-        i.nombre.toLowerCase().includes(q) ||
-        i.telefono?.toLowerCase().includes(q) ||
-        String(i.id_servicio).includes(dSearchRecoleccion)
-      );
-    }
-    if (filtrosRecoleccion.size > 0) {
-      items = items.filter(i => i.estado_equipo != null && filtrosRecoleccion.has(i.estado_equipo));
-    }
-    if (filtrosRecoleccion.size <= 1) return items;
-    return [...items].sort((a, b) => {
-      const oa = ORDEN_ESTADO[a.estado_equipo ?? ""] ?? 99;
-      const ob = ORDEN_ESTADO[b.estado_equipo ?? ""] ?? 99;
-      if (oa !== ob) return oa - ob;
-      return b.dias_vencido - a.dias_vencido;
-    });
-  }, [recoleccion, filtrosRecoleccion, dSearchRecoleccion]);
 
   const weekOptions = useMemo(() => buildWeekOptions(), []);
 
@@ -200,13 +156,11 @@ export function FinanzasPage() {
       .flatMap(k => (alertas[k]?.items ?? []).map(c => c.id_factura ?? 0))
       .filter(Boolean);
   }, [alertas]);
-  const idsRecoleccion = useMemo(() => recoleccion?.items.map(i => i.id_servicio) ?? [], [recoleccion]);
   const idsHistorial   = useMemo(() => historial?.items.map(i => i.id) ?? [], [historial]);
 
   const { data: obsSemana }     = useObservaciones("factura",     idsSemana,      viewMode === "semana");
   const { data: obsDia }        = useObservaciones("factura",     idsDia,         viewMode === "dia");
   const { data: obsCobranza }   = useObservaciones("factura",     idsCobranza,    viewMode === "cobranza");
-  const { data: obsRecoleccion }= useObservaciones("recoleccion", idsRecoleccion, viewMode === "recoleccion");
   const { data: obsHistorial }  = useObservaciones("pago",        idsHistorial,   viewMode === "historial");
 
   const isCurrentWeek = weekStart === currentMonday;
@@ -460,132 +414,7 @@ export function FinanzasPage() {
           searchRaw={searchCobranza}
         />
       )}
-      {viewMode === "recoleccion" && (
-  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <div>
-        <p style={sectionLabel}>Clientes en recolección</p>
-        <span style={{ fontSize: "13px", color: "#64748b" }}>
-          {recoleccion?.total ?? 0} cliente{recoleccion?.total !== 1 ? "s" : ""} con 7+ días vencidos
-        </span>
-      </div>
-    </div>
-    <div style={{ display: "flex", gap: "12px", marginBottom: "4px", flexWrap: "wrap" }}>
-      <input
-        type="text"
-        placeholder="Buscar por nombre, teléfono o ID..."
-        value={searchRecoleccion}
-        onChange={(e) => setSearchRecoleccion(e.target.value)}
-        style={searchInput}
-      />
-    </div>
-    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-      <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>Estado equipo:</span>
-      {([
-        { key: "recuperado",        label: "Todo recuperado",   color: "#16a34a" },
-        { key: "antena_no_recuperada", label: "Antena no recuperada", color: "#2563eb" },
-        { key: "modem_no_recuperado",  label: "Modem no recuperado",  color: "#d97706" },
-        { key: "nada_recuperado",   label: "Nada recuperado",   color: "#dc2626" },
-      ] as const).map(({ key, label, color }) => {
-        const activo = filtrosRecoleccion.has(key);
-        return (
-          <button
-            key={key}
-            onClick={() => toggleFiltroRecoleccion(key)}
-            style={{
-              padding: "4px 12px", borderRadius: "20px",
-              border: `1px solid ${activo ? color : "#e2e8f0"}`,
-              backgroundColor: activo ? color : "white",
-              color: activo ? "white" : "#475569",
-              fontSize: "12px", fontWeight: activo ? 600 : 400, cursor: "pointer",
-            }}
-          >
-            {label}
-          </button>
-        );
-      })}
-      {filtrosRecoleccion.size > 0 && (
-        <button
-          onClick={() => setFiltrosRecoleccion(new Set())}
-          style={{ padding: "4px 12px", borderRadius: "20px", border: "1px solid #e2e8f0",
-                   backgroundColor: "white", color: "#94a3b8", fontSize: "12px", cursor: "pointer" }}
-        >
-          Limpiar
-        </button>
-      )}
-    </div>
-    {recoleccionLoading && <p style={{ color: "#64748b" }}>Cargando...</p>}
-    {recoleccion && (
-      <div style={{ overflowX: "auto" }}>
-        <table style={tableStyle}>
-          <thead>
-            <tr style={{ backgroundColor: "#f5f3ff" }}>
-              <th style={th}>ID</th>
-              <th style={th}>Cliente</th>
-              <th style={th}>Dirección</th>
-              <th style={th}>Teléfono</th>
-              <th style={th}>Técnico</th>
-              <th style={th}>Días vencido</th>
-              <th style={th}>Total</th>
-              <th style={th}>Observaciones</th>
-              <th style={th}>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {itemsRecoleccionFiltrados.map((item) => (
-              <tr key={item.id_servicio} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                <td style={{ ...td, color: "#94a3b8", fontSize: "12px" }}>{item.id_servicio}</td>
-                <td style={td}>{item.nombre}</td>
-                <td style={td}>{item.direccion || "—"}</td>
-                <td style={td}>{item.telefono || "—"}</td>
-                <td style={{ ...td, color: item.nombre_tecnico ? "#1e293b" : "#94a3b8", fontSize: item.nombre_tecnico ? "14px" : "12px" }}>
-                  {item.nombre_tecnico || "Sin asignar"}
-                </td>
-                <td style={{ ...td, fontWeight: 700, color: "#7c3aed" }}>{item.dias_vencido} días</td>
-                <td style={{ ...td, fontWeight: 600 }}>${item.total.toFixed(2)}</td>
-                <ObservacionCell entityType="recoleccion" entityId={item.id_servicio} value={obsRecoleccion?.[item.id_servicio] ?? item.notas} />
-                <td style={td}>
-                  {(() => {
-                    const ESTADO_CONFIG: Record<string, { label: string; bg: string }> = {
-                      recuperado:           { label: "Todo recuperado",      bg: "#16a34a" },
-                      antena_no_recuperada: { label: "Antena no recuperada", bg: "#2563eb" },
-                      modem_no_recuperado:  { label: "Módem no recuperado",  bg: "#d97706" },
-                      nada_recuperado:      { label: "Nada recuperado",      bg: "#dc2626" },
-                    };
-                    const cfg = item.estado_equipo ? ESTADO_CONFIG[item.estado_equipo] : null;
-                    return (
-                      <button
-                        onClick={() => setItemRecoleccion(item)}
-                        style={{
-                          padding: "4px 12px", borderRadius: "6px", border: "none",
-                          backgroundColor: cfg ? cfg.bg : "#7c3aed",
-                          color: "white", fontSize: "12px", fontWeight: 600, cursor: "pointer",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {cfg ? cfg.label : "Sin gestionar"}
-                      </button>
-                    );
-                  })()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {itemsRecoleccionFiltrados.length === 0 && (
-          <EmptyState text={filtrosRecoleccion.size > 0 ? "No hay clientes con ese estado de equipo." : "No hay clientes en recolección."} />
-        )}
-      </div>
-    )}
-  </div>
-)}
-
-{itemRecoleccion && (
-  <RecoleccionModal
-    item={itemRecoleccion}
-    onClose={() => setItemRecoleccion(null)}
-  />
-)}
+      {viewMode === "recoleccion" && <RecoleccionTab />}
 
       {viewMode === "historial" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>

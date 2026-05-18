@@ -9,7 +9,7 @@ import apiClient from "../../../core/api/apiClient";
 import { vincularServicio } from "../api/reportes.api";
 import type { EstadoTarea, TipoTarea, PrioridadTarea, InstalacionDatos } from "../types/reportes";
 
-interface UsuarioItem { id: number; nombre: string; username: string; activo: boolean; }
+interface UsuarioItem { id: number; nombre: string; username: string; activo: boolean; rol: string; }
 
 // ── Configuración de display ───────────────────────────────────────────────────
 
@@ -73,6 +73,7 @@ interface Props {
 export function TareaDetailModal({ tareaId, onClose }: Props) {
   const { user } = useAuth();
   const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
+  const esAdmin = user?.rol === "administrador";
   const esVentas = user?.rol === "ventas";
   const { data: tarea, isLoading } = useTarea(tareaId);
   const { data: transiciones = [] } = useTareaTransiciones(tareaId);
@@ -91,7 +92,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
     staleTime: 60_000,
     enabled: puedeGestionar,
   });
-  const tecnicosActivos = usuarios.filter(u => u.activo);
+  const tecnicosActivos = usuarios.filter(u => u.activo && u.rol === "tecnico");
 
   const apiBase = (import.meta.env.VITE_API_URL as string) ?? "";
 
@@ -104,6 +105,10 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
   const [modoEdicion, setModoEdicion] = useState(false);
   const [editDesc, setEditDesc]       = useState("");
   const [editPrio, setEditPrio]       = useState<PrioridadTarea>("MEDIA");
+  const [editFecha, setEditFecha]     = useState("");      // YYYY-MM-DD
+  const [editHoraInicio, setEditHoraInicio] = useState(""); // HH:MM
+  const [editHoraFin, setEditHoraFin]       = useState(""); // HH:MM
+  const [editError, setEditError]     = useState("");
 
   // Estado de reasignación
   const [modoAsignar, setModoAsignar]     = useState(false);
@@ -113,12 +118,46 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
     if (!tarea) return;
     setEditDesc(tarea.descripcion);
     setEditPrio(tarea.prioridad as PrioridadTarea);
+    // Prefill horario si existe (formato ISO -> YYYY-MM-DD + HH:MM)
+    if (tarea.fecha_inicio) {
+      const ini = new Date(tarea.fecha_inicio);
+      setEditFecha(ini.toISOString().slice(0, 10));
+      setEditHoraInicio(ini.toTimeString().slice(0, 5));
+    } else {
+      setEditFecha("");
+      setEditHoraInicio("");
+    }
+    if (tarea.fecha_fin) {
+      const fin = new Date(tarea.fecha_fin);
+      setEditHoraFin(fin.toTimeString().slice(0, 5));
+    } else {
+      setEditHoraFin("");
+    }
+    setEditError("");
     setModoEdicion(true);
   }
 
   function guardarEdicion() {
+    setEditError("");
+    // Validación atómica del horario (igual que en NuevaTareaModal)
+    const horarioParcial = (editFecha || editHoraInicio || editHoraFin) && !(editFecha && editHoraInicio && editHoraFin);
+    if (horarioParcial) {
+      setEditError("Completa fecha, hora de inicio y hora de fin, o quita el horario.");
+      return;
+    }
+    if (editFecha && editHoraInicio && editHoraFin && editHoraFin <= editHoraInicio) {
+      setEditError("La hora de fin debe ser posterior a la hora de inicio.");
+      return;
+    }
+    const fecha_inicio = editFecha && editHoraInicio ? `${editFecha}T${editHoraInicio}:00` : null;
+    const fecha_fin    = editFecha && editHoraFin    ? `${editFecha}T${editHoraFin}:00`    : null;
     actualizar(
-      { descripcion: editDesc.trim() || undefined, prioridad: editPrio },
+      {
+        descripcion: editDesc.trim() || undefined,
+        prioridad: editPrio,
+        fecha_inicio,
+        fecha_fin,
+      },
       { onSuccess: () => setModoEdicion(false) }
     );
   }
@@ -228,7 +267,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
               {estadoActual.label}
             </span>
           )}
-          {puedeGestionar && tarea && !modoEdicion && (
+          {esAdmin && tarea && !modoEdicion && (
             <button
               onClick={abrirEdicion}
               style={{
@@ -306,6 +345,63 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                         );
                       })}
                     </div>
+                    {/* Horario programado */}
+                    <p style={{ margin: "10px 0 6px", fontSize: "10px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                      Horario programado
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={miniLabel}>Fecha</label>
+                        <input
+                          type="date"
+                          value={editFecha}
+                          onChange={e => setEditFecha(e.target.value)}
+                          style={miniInput}
+                        />
+                      </div>
+                      <div>
+                        <label style={miniLabel}>Inicio</label>
+                        <input
+                          type="time"
+                          value={editHoraInicio}
+                          onChange={e => setEditHoraInicio(e.target.value)}
+                          style={miniInput}
+                        />
+                      </div>
+                      <div>
+                        <label style={miniLabel}>Fin</label>
+                        <input
+                          type="time"
+                          value={editHoraFin}
+                          onChange={e => setEditHoraFin(e.target.value)}
+                          style={miniInput}
+                        />
+                      </div>
+                      {(editFecha || editHoraInicio || editHoraFin) && (
+                        <button
+                          type="button"
+                          onClick={() => { setEditFecha(""); setEditHoraInicio(""); setEditHoraFin(""); }}
+                          style={{
+                            gridColumn: "1 / -1", padding: "3px", fontSize: "11px",
+                            background: "none", border: "none", color: "#dc2626",
+                            cursor: "pointer", textAlign: "right",
+                          }}
+                        >
+                          Quitar horario
+                        </button>
+                      )}
+                    </div>
+
+                    {editError && (
+                      <p style={{
+                        margin: "8px 0 0", padding: "6px 10px", borderRadius: "6px",
+                        background: "#fef2f2", border: "1px solid #fecaca",
+                        fontSize: "12px", color: "#dc2626",
+                      }}>
+                        {editError}
+                      </p>
+                    )}
+
                     <div style={{ display: "flex", gap: "6px", marginTop: "10px" }}>
                       <button onClick={() => setModoEdicion(false)} disabled={actualizando} style={{
                         flex: 1, padding: "6px", borderRadius: "6px", fontSize: "12px",
@@ -421,7 +517,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                             ? (usuarios.find(u => u.id === tarea.tecnico_id)?.nombre ?? `#${tarea.tecnico_id}`)
                             : "Sin asignar"}
                         </p>
-                        {puedeGestionar && (
+                        {esAdmin && (
                           <button onClick={() => setModoAsignar(true)} style={{
                             padding: "2px 8px", borderRadius: "5px", fontSize: "11px",
                             border: "1px solid #e2e8f0", background: "transparent",
@@ -854,3 +950,17 @@ function PanelInstalacion({ datos, tareaId, esAdmin }: { datos: InstalacionDatos
     </section>
   );
 }
+
+// ── Estilos pequeños reutilizables ───────────────────────────────────────────
+
+const miniLabel: React.CSSProperties = {
+  display: "block", marginBottom: "3px",
+  fontSize: "10px", fontWeight: 600, color: "#64748b",
+};
+
+const miniInput: React.CSSProperties = {
+  width: "100%", boxSizing: "border-box",
+  padding: "5px 8px", borderRadius: "6px",
+  border: "1px solid #cbd5e1", fontSize: "12px",
+  color: "#1e293b", background: "white", outline: "none",
+};

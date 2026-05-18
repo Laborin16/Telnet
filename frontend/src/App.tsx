@@ -33,7 +33,7 @@ const NAV_ITEMS: { key: Tab; label: string; icon: ReactNode; roles: RolUsuario[]
   { key: "finanzas",  label: "Finanzas",  icon: <Banknote size={16} />,        roles: ["administrador", "cobranza"] },
   { key: "auditoria", label: "Auditoría", icon: <ClipboardList size={16} />,   roles: ["administrador"] },
   { key: "tareas",      label: "Tareas",      icon: <Wrench size={16} />,        roles: ["administrador", "supervisor", "tecnico", "ventas"] },
-  { key: "calendario",  label: "Calendario",  icon: <CalendarDays size={16} />, roles: ["administrador", "supervisor", "tecnico"] },
+  { key: "calendario",  label: "Calendario",  icon: <CalendarDays size={16} />, roles: ["administrador", "tecnico"] },
   { key: "usuarios",    label: "Usuarios",    icon: <KeyRound size={16} />,     roles: ["administrador"] },
 ];
 
@@ -128,12 +128,7 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
         const matchZona = !zonaFiltro || c.zona?.nombre === zonaFiltro;
         return matchStatus && matchAlerta && matchSearch && matchPlan && matchZona;
       })
-      .sort((a, b) => {
-        const oa = a.alerta_corte != null ? ALERTA_ORDER[a.alerta_corte] : 4;
-        const ob = b.alerta_corte != null ? ALERTA_ORDER[b.alerta_corte] : 4;
-        if (oa !== ob) return oa - ob;
-        return (a.dias_para_corte ?? 999) - (b.dias_para_corte ?? 999);
-      });
+      .sort((a, b) => b.id_servicio - a.id_servicio);
   }, [allClients, status, alerta, debouncedSearch, planFiltro, zonaFiltro, recoleccionIds]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
