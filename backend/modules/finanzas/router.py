@@ -362,8 +362,11 @@ async def estado_equipo(
                 db=db,
             )
         except Exception as e:
-            # No queremos que falle el guardado del estado por un fallo de tarea
-            print(f"[recoleccion → tarea] error sincronizando tarea: {e}")
+            # No queremos que falle el guardado del estado por un fallo de tarea,
+            # pero sí dejamos traza completa para diagnóstico.
+            import traceback
+            print(f"[recoleccion → tarea] error sincronizando tarea: {e!r}")
+            traceback.print_exc()
 
     return result
 
@@ -381,10 +384,25 @@ async def _sincronizar_tarea_recoleccion(
     - Si ya hay una y el técnico cambió → la reasigna.
     """
     from sqlalchemy import select
+    from modules.auth.models import Usuario
     from modules.reportes import service as reportes_service
     from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
     from modules.reportes.models import Tarea
     from modules.reportes.schemas import AsignarTecnico, TareaCreate
+
+    # El "id_tecnico" que llega desde el frontend de recolección es el id de
+    # WispHub (el catálogo de técnicos de WispHub). La tabla `tareas` apunta a
+    # usuarios locales, así que mapeamos vía Usuario.wisphub_id.
+    res_user = await db.execute(
+        select(Usuario.id).where(Usuario.wisphub_id == tecnico_id, Usuario.activo.is_(True))
+    )
+    tecnico_local_id = res_user.scalar_one_or_none()
+    if tecnico_local_id is None:
+        print(
+            f"[recoleccion → tarea] técnico WispHub id={tecnico_id} no tiene usuario local "
+            "vinculado (Usuario.wisphub_id). No se crea/reasigna tarea."
+        )
+        return
 
     ESTADOS_TERMINALES = (EstadoTarea.COMPLETADO, EstadoTarea.CANCELADO)
 
@@ -400,20 +418,18 @@ async def _sincronizar_tarea_recoleccion(
     tarea_existente = result.scalars().first()
 
     if tarea_existente is None:
-        # Crear nueva tarea
         datos = TareaCreate(
             id_servicio=id_servicio,
             tipo=TipoTarea.RECOLECCION,
             prioridad=PrioridadTarea.MEDIA,
             descripcion=(notas or "Recolección de equipo programada desde finanzas.").strip(),
-            tecnico_id=tecnico_id,
+            tecnico_id=tecnico_local_id,
         )
         await reportes_service.crear_tarea(datos, usuario, db)
-    elif tarea_existente.tecnico_id != tecnico_id:
-        # Reasignar técnico
+    elif tarea_existente.tecnico_id != tecnico_local_id:
         await reportes_service.asignar_tecnico(
             tarea_existente.id,
-            AsignarTecnico(tecnico_id=tecnico_id),
+            AsignarTecnico(tecnico_id=tecnico_local_id),
             usuario,
             db,
         )
