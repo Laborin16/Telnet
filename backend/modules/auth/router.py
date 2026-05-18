@@ -92,7 +92,13 @@ async def auth_usuarios(
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
-    requerir_admin(usuario)
+    # Lectura permitida a admin y supervisor (supervisor necesita la lista de técnicos
+    # para asignar tareas). Las mutaciones siguen siendo solo admin.
+    if usuario.get("id") is None:
+        raise HTTPException(status_code=401, detail="Autenticación requerida.")
+    rol = usuario.get("rol")
+    if rol not in ("administrador", "supervisor") and not usuario.get("es_admin", False):
+        raise HTTPException(status_code=403, detail="Sin permisos para listar usuarios.")
     return await get_usuarios(db)
 
 
