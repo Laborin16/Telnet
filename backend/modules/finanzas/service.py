@@ -514,9 +514,13 @@ async def get_tecnicos(db: AsyncSession) -> list:
     from sqlalchemy import select
     from modules.auth.models import RolUsuario, Usuario
 
+    # Comparar contra el .value ("tecnico") en vez del miembro del enum.
+    # En PostgreSQL la columna es un enum nativo cuyos valores son los .value;
+    # comparar contra el miembro hacía que SQLAlchemy emitiera el .name ('TECNICO')
+    # y la query no encontraba nada.
     result = await db.execute(
         select(Usuario.id, Usuario.nombre)
-        .where(Usuario.activo.is_(True), Usuario.rol == RolUsuario.TECNICO)
+        .where(Usuario.activo.is_(True), Usuario.rol == RolUsuario.TECNICO.value)
         .order_by(Usuario.nombre)
     )
     return [{"id": uid, "nombre": nombre} for uid, nombre in result.all()]
