@@ -5,8 +5,8 @@ import { useTarea, useTareaTransiciones, useTareaEventos, useTareaFotos } from "
 import { useTransicionarEstado, useSubirFoto, useActualizarTarea, useAsignarTecnico } from "../hooks/useTareaActions";
 import { useClientDetail } from "../../clients/hooks/useClientDetail";
 import apiClient from "../../../core/api/apiClient";
-import { vincularServicio } from "../api/reportes.api";
-import type { EstadoTarea, TipoTarea, PrioridadTarea, InstalacionDatos } from "../types/reportes";
+import { vincularServicio, actualizarDatosInstalacion, fetchPlanes, fetchRouters, fetchIpsDisponibles } from "../api/reportes.api";
+import type { EstadoTarea, TipoTarea, PrioridadTarea, InstalacionDatos, WispPlan, WispRouter, WispIPs } from "../types/reportes";
 
 interface UsuarioItem { id: number; nombre: string; username: string; activo: boolean; rol: string; }
 
@@ -98,6 +98,35 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
   const [estadoPendiente, setEstadoPendiente] = useState<EstadoTarea | null>(null);
   const [comentario, setComentario] = useState("");
   const [errorComentario, setErrorComentario] = useState(false);
+  // Datos para completar una INSTALACION (solo cuando estadoPendiente === COMPLETADO)
+  const [compRouterId, setCompRouterId] = useState("");
+  const [compPlanId, setCompPlanId]     = useState("");
+  const [compIp, setCompIp]             = useState("");
+  const [errorCompletar, setErrorCompletar] = useState("");
+
+  const esCompletandoInstalacion = estadoPendiente === "COMPLETADO" && tarea?.tipo === "INSTALACION";
+
+  const { data: planesWh = [] } = useQuery<WispPlan[]>({
+    queryKey: ["wisphub-planes"],
+    queryFn: fetchPlanes,
+    staleTime: 5 * 60_000,
+    enabled: esCompletandoInstalacion,
+  });
+  const { data: routersWh = [] } = useQuery<WispRouter[]>({
+    queryKey: ["wisphub-routers"],
+    queryFn: fetchRouters,
+    staleTime: 5 * 60_000,
+    enabled: esCompletandoInstalacion,
+  });
+  const EMPTY_IPS: WispIPs = { disponibles: [], ocupadas: [] };
+  const compRouterIdNum = compRouterId ? Number(compRouterId) : undefined;
+  const { data: ipsWh = EMPTY_IPS, isFetching: cargandoIps, refetch: refetchIps } = useQuery<WispIPs>({
+    queryKey: ["wisphub-ips", compRouterIdNum],
+    queryFn: () => fetchIpsDisponibles(compRouterIdNum!),
+    staleTime: 0,
+    gcTime: 0,
+    enabled: esCompletandoInstalacion && !!compRouterIdNum,
+  });
 
   // Estado de edición (descripción / prioridad)
   const [modoEdicion, setModoEdicion] = useState(false);
@@ -191,6 +220,10 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
     setEstadoPendiente(estadoPendiente === estado ? null : estado);
     setComentario("");
     setErrorComentario(false);
+    setCompRouterId("");
+    setCompPlanId("");
+    setCompIp("");
+    setErrorCompletar("");
   }
 
   function confirmarTransicion() {
@@ -199,16 +232,47 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
       setErrorComentario(true);
       return;
     }
+    let completarPayload = null;
+    if (esCompletandoInstalacion) {
+      if (!compRouterId || !compPlanId || !compIp) {
+        setErrorCompletar("Selecciona router, plan e IP para completar la instalación.");
+        return;
+      }
+      const routerSel = routersWh.find(r => r.id === Number(compRouterId));
+      const planSel = planesWh.find(p => p.id === Number(compPlanId));
+      completarPayload = {
+        router_id: Number(compRouterId),
+        router_nombre: routerSel?.nombre ?? null,
+        plan_id: Number(compPlanId),
+        plan_nombre: planSel?.nombre ?? null,
+        ip_asignada: compIp,
+      };
+    }
+    setErrorCompletar("");
     transicionar(
       {
         estado_nuevo: estadoPendiente,
         comentario:   comentario.trim() || null,
+        completar_instalacion: completarPayload,
       },
       {
         onSuccess: () => {
           setEstadoPendiente(null);
           setComentario("");
           setErrorComentario(false);
+          setCompRouterId("");
+          setCompPlanId("");
+          setCompIp("");
+          setErrorCompletar("");
+        },
+        onError: (err: unknown) => {
+          const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+          setErrorCompletar(detail ?? "Error al confirmar la transición.");
+          // Si la IP no estaba disponible, refrescamos la lista
+          if (detail && detail.toLowerCase().includes("ip")) {
+            refetchIps();
+            setCompIp("");
+          }
         },
       }
     );
@@ -535,7 +599,12 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
 
               {/* Panel datos de instalación */}
               {tarea.tipo === "INSTALACION" && tarea.datos_instalacion && (
-                <PanelInstalacion datos={tarea.datos_instalacion} tareaId={tarea.id} esAdmin={puedeGestionar} />
+                <PanelInstalacion
+                  datos={tarea.datos_instalacion}
+                  tareaId={tarea.id}
+                  esAdmin={puedeGestionar}
+                  permiteEditarCliente={puedeGestionar && tarea.estado !== "COMPLETADO" && tarea.estado !== "CANCELADO"}
+                />
               )}
 
 
@@ -597,10 +666,52 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                       />
                       {errorComentario && (
                         <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#dc2626" }}>
-                          {estadoPendiente === "BLOQUEADO" 
+                          {estadoPendiente === "BLOQUEADO"
                             ? "El comentario es obligatorio para bloquear una tarea."
                             : "El comentario es obligatorio para completar una tarea."}
                         </p>
+                      )}
+
+                      {/* Captura de datos técnicos cuando se completa una INSTALACION */}
+                      {esCompletandoInstalacion && (
+                        <div style={{ marginTop: "12px", padding: "10px", borderRadius: "8px", background: "white", border: "1px solid #cbd5e1" }}>
+                          <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                            Datos de instalación (se registra el cliente en WispHub)
+                          </p>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                            <div style={{ gridColumn: "1 / -1" }}>
+                              <label style={miniLabel}>Router</label>
+                              <select value={compRouterId} onChange={e => { setCompRouterId(e.target.value); setCompIp(""); }} style={miniInput}>
+                                <option value="">— Seleccionar router —</option>
+                                {routersWh.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                              </select>
+                            </div>
+                            <div style={{ gridColumn: "1 / -1" }}>
+                              <label style={miniLabel}>Plan</label>
+                              <select value={compPlanId} onChange={e => setCompPlanId(e.target.value)} style={miniInput}>
+                                <option value="">— Seleccionar plan —</option>
+                                {planesWh.map(p => <option key={p.id} value={p.id}>{p.nombre}{p.precio ? ` — $${p.precio}` : ""}</option>)}
+                              </select>
+                            </div>
+                            <div style={{ gridColumn: "1 / -1" }}>
+                              <label style={miniLabel}>IP disponible</label>
+                              <select value={compIp} onChange={e => setCompIp(e.target.value)} style={miniInput} disabled={!compRouterId || cargandoIps}>
+                                <option value="">
+                                  {!compRouterId ? "Selecciona un router primero" : cargandoIps ? "Cargando IPs..." : ipsWh.disponibles.length === 0 ? "Sin IPs disponibles" : "— Seleccionar IP —"}
+                                </option>
+                                {ipsWh.disponibles.map(ip => <option key={ip} value={ip}>{ip}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {errorCompletar && (
+                        <p style={{
+                          margin: "8px 0 0", padding: "6px 10px", borderRadius: "6px",
+                          background: "#fef2f2", border: "1px solid #fecaca",
+                          fontSize: "12px", color: "#dc2626",
+                        }}>{errorCompletar}</p>
                       )}
 
                       <div style={{ display: "flex", gap: "8px", marginTop: "10px", justifyContent: "flex-end" }}>
@@ -787,16 +898,23 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
 
 const useStateLocal = useState;
 
-const SYNC_CONFIG = {
+const SYNC_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  pendiente:  { label: "Pendiente",  color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
   pending:    { label: "Pendiente",  color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
   registrado: { label: "Registrado", color: "#2563eb", bg: "#eff6ff", border: "#93c5fd" },
   vinculado:  { label: "Vinculado",  color: "#16a34a", bg: "#f0fdf4", border: "#86efac" },
   error:      { label: "Error",      color: "#dc2626", bg: "#fef2f2", border: "#fca5a5" },
 };
 
-function PanelInstalacion({ datos, tareaId, esAdmin }: { datos: InstalacionDatos; tareaId: number; esAdmin?: boolean }) {
+function PanelInstalacion({ datos, tareaId, esAdmin, permiteEditarCliente }: { datos: InstalacionDatos; tareaId: number; esAdmin?: boolean; permiteEditarCliente?: boolean }) {
   const [modoVincular, setModoVincular] = useStateLocal(false);
   const [idServicioInput, setIdServicioInput] = useStateLocal("");
+  const [editarCliente, setEditarCliente] = useStateLocal(false);
+  const [edNombre, setEdNombre] = useStateLocal(datos.nombre_cliente);
+  const [edTel, setEdTel] = useStateLocal(datos.telefono ?? "");
+  const [edTel2, setEdTel2] = useStateLocal(datos.telefono2 ?? "");
+  const [edDir, setEdDir] = useStateLocal(datos.direccion ?? "");
+  const [edError, setEdError] = useStateLocal("");
   const queryClient = useQueryClient();
   const { mutate: vincular, isPending: vinculando } = useMutation({
     mutationFn: (id: number) => vincularServicio(tareaId, id),
@@ -807,9 +925,27 @@ function PanelInstalacion({ datos, tareaId, esAdmin }: { datos: InstalacionDatos
       setIdServicioInput("");
     },
   });
+  const { mutate: guardarCliente, isPending: guardandoCliente } = useMutation({
+    mutationFn: () => actualizarDatosInstalacion(tareaId, {
+      nombre_cliente: edNombre.trim(),
+      telefono: edTel.trim() || null,
+      telefono2: edTel2.trim() || null,
+      direccion: edDir.trim() || null,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tarea", tareaId] });
+      queryClient.invalidateQueries({ queryKey: ["tareas"] });
+      setEditarCliente(false);
+      setEdError("");
+    },
+    onError: (err: unknown) => {
+      setEdError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Error al guardar.");
+    },
+  });
 
-  const sync = datos.wisphub_sync ?? "pending";
-  const syncCfg = SYNC_CONFIG[sync] ?? SYNC_CONFIG.pending;
+  const sync = datos.wisphub_sync ?? "pendiente";
+  const syncCfg = SYNC_CONFIG[sync] ?? SYNC_CONFIG.pendiente;
+  const tieneDatosTecnicos = datos.router_id || datos.plan_id || datos.ip_asignada;
 
   return (
     <section>
@@ -822,31 +958,103 @@ function PanelInstalacion({ datos, tareaId, esAdmin }: { datos: InstalacionDatos
         </span>
       </div>
 
-      <div style={{ background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
-        {/* Datos del cliente */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
-          {[
-            { label: "Nombre", value: datos.nombre_cliente },
-            { label: "Teléfono 1", value: datos.telefono ?? "—" },
-            { label: "Teléfono 2", value: datos.telefono2 ?? "—" },
-            { label: "Router", value: datos.router_nombre ?? `#${datos.router_id}` },
-            { label: "Plan", value: datos.plan_nombre ?? `#${datos.plan_id}` },
-            { label: "IP asignada", value: datos.ip_asignada },
-          ].map(({ label, value }) => (
-            <div key={label}>
-              <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>{label}</p>
-              <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500, fontFamily: label === "Usuario RB" || label === "IP asignada" ? "monospace" : undefined }}>
-                {value}
-              </p>
+      <div style={{ background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+        {/* Datos del cliente — editables si la tarea aún no se completó */}
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+            <p style={{ margin: 0, fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>Cliente</p>
+            {permiteEditarCliente && !editarCliente && (
+              <button onClick={() => {
+                setEdNombre(datos.nombre_cliente);
+                setEdTel(datos.telefono ?? "");
+                setEdTel2(datos.telefono2 ?? "");
+                setEdDir(datos.direccion ?? "");
+                setEdError("");
+                setEditarCliente(true);
+              }} style={{ padding: "2px 8px", borderRadius: "5px", fontSize: "11px", border: "1px solid #e2e8f0", background: "transparent", color: "#64748b", cursor: "pointer" }}>
+                Editar
+              </button>
+            )}
+          </div>
+
+          {editarCliente ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={miniLabel}>Nombre</label>
+                <input value={edNombre} onChange={e => setEdNombre(e.target.value)} style={miniInput} />
+              </div>
+              <div>
+                <label style={miniLabel}>Teléfono 1</label>
+                <input value={edTel} onChange={e => setEdTel(e.target.value)} placeholder="Ej. 6441234567" style={miniInput} />
+              </div>
+              <div>
+                <label style={miniLabel}>Teléfono 2</label>
+                <input value={edTel2} onChange={e => setEdTel2(e.target.value)} placeholder="Ej. 6449876543" style={miniInput} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={miniLabel}>Dirección</label>
+                <input value={edDir} onChange={e => setEdDir(e.target.value)} style={miniInput} />
+              </div>
+              <div style={{ gridColumn: "1 / -1", fontSize: "10px", color: "#94a3b8" }}>
+                Teléfonos: 8-14 dígitos sin código de país, varios separados por coma.
+              </div>
+              {edError && (
+                <div style={{ gridColumn: "1 / -1", padding: "6px 10px", borderRadius: "6px", background: "#fef2f2", border: "1px solid #fecaca", fontSize: "12px", color: "#dc2626" }}>{edError}</div>
+              )}
+              <div style={{ gridColumn: "1 / -1", display: "flex", gap: "6px" }}>
+                <button onClick={() => guardarCliente()} disabled={guardandoCliente || !edNombre.trim()} style={{ flex: 1, padding: "6px", borderRadius: "6px", fontSize: "12px", fontWeight: 700, border: "none", background: guardandoCliente ? "#cbd5e1" : "#2563eb", color: "white", cursor: guardandoCliente ? "not-allowed" : "pointer" }}>
+                  {guardandoCliente ? "..." : "Guardar"}
+                </button>
+                <button onClick={() => { setEditarCliente(false); setEdError(""); }} disabled={guardandoCliente} style={{ padding: "6px 10px", borderRadius: "6px", fontSize: "12px", border: "1px solid #e2e8f0", background: "white", color: "#64748b", cursor: "pointer" }}>
+                  Cancelar
+                </button>
+              </div>
             </div>
-          ))}
-          {datos.direccion && (
-            <div style={{ gridColumn: "1 / -1" }}>
-              <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Dirección</p>
-              <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{datos.direccion}</p>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
+              <div>
+                <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Nombre</p>
+                <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{datos.nombre_cliente}</p>
+              </div>
+              <div />
+              <div>
+                <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Teléfono 1</p>
+                <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{datos.telefono ?? "—"}</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Teléfono 2</p>
+                <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{datos.telefono2 ?? "—"}</p>
+              </div>
+              {datos.direccion && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Dirección</p>
+                  <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{datos.direccion}</p>
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {/* Datos técnicos: solo se muestran si ya se completó la instalación */}
+        {tieneDatosTecnicos && (
+          <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "10px" }}>
+            <p style={{ margin: "0 0 6px", fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>Datos técnicos</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
+              <div>
+                <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Router</p>
+                <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{datos.router_nombre ?? (datos.router_id ? `#${datos.router_id}` : "—")}</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>Plan</p>
+                <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500 }}>{datos.plan_nombre ?? (datos.plan_id ? `#${datos.plan_id}` : "—")}</p>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <p style={{ margin: "0 0 1px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>IP asignada</p>
+                <p style={{ margin: 0, fontSize: "13px", color: "#1e293b", fontWeight: 500, fontFamily: "monospace" }}>{datos.ip_asignada ?? "—"}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error WispHub */}
         {sync === "error" && datos.wisphub_error && (

@@ -89,6 +89,22 @@ export async function vincularServicio(tareaId: number, idServicio: number): Pro
   return data;
 }
 
+export interface InstalacionDatosUpdate {
+  nombre_cliente?: string | null;
+  telefono?: string | null;
+  telefono2?: string | null;
+  direccion?: string | null;
+}
+
+export async function actualizarDatosInstalacion(tareaId: number, datos: InstalacionDatosUpdate): Promise<Tarea> {
+  const { data } = await apiClient.patch(`${BASE}/tareas/${tareaId}/instalacion-datos`, datos);
+  return data;
+}
+
+export async function eliminarTarea(tareaId: number): Promise<void> {
+  await apiClient.delete(`${BASE}/tareas/${tareaId}`);
+}
+
 export async function subirFoto(id: number, archivo: File): Promise<TareaFoto> {
   const formData = new FormData();
   formData.append("archivo", archivo);

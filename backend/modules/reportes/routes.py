@@ -9,6 +9,7 @@ from core.wisphub.client import wisphub_client
 from modules.reportes.schemas import (
     AsignarTecnico,
     EliminarSuscripcionPush,
+    InstalacionDatosUpdate,
     SuscripcionPushCreate,
     TareaCreate,
     TareaEventoResponse,
@@ -85,6 +86,19 @@ async def actualizar_tarea(
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.delete("/tareas/{tarea_id}", status_code=204)
+async def eliminar_tarea(
+    tarea_id: int,
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    _requerir_admin_estricto(usuario)
+    try:
+        await service.eliminar_tarea(tarea_id, usuario, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.patch("/tareas/{tarea_id}/asignar", response_model=TareaResponse)
@@ -221,6 +235,22 @@ async def vincular_servicio(
         return await service.vincular_servicio(tarea_id, datos, usuario, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/tareas/{tarea_id}/instalacion-datos", response_model=TareaResponse)
+async def actualizar_datos_instalacion(
+    tarea_id: int,
+    datos: InstalacionDatosUpdate,
+    db: AsyncSession = Depends(get_db),
+    usuario: dict = Depends(get_usuario),
+):
+    _requerir_admin(usuario)
+    try:
+        return await service.actualizar_datos_instalacion(tarea_id, datos, usuario, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.post("/push/suscribir", status_code=201)

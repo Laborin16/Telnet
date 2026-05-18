@@ -27,15 +27,16 @@ export interface InstalacionDatos {
   telefono: string | null;
   telefono2: string | null;
   direccion: string | null;
-  router_id: number;
-  router_nombre: string | null;
-  zona_id: number | null;
-  zona_nombre: string | null;
-  plan_id: number;
-  plan_nombre: string | null;
-  ip_asignada: string;
-  wisphub_sync: "pending" | "registrado" | "vinculado" | "error";
-  wisphub_task_id: string | null;
+  // Estos campos se llenan al completar la instalación, no al crearla.
+  router_id?: number | null;
+  router_nombre?: string | null;
+  zona_id?: number | null;
+  zona_nombre?: string | null;
+  plan_id?: number | null;
+  plan_nombre?: string | null;
+  ip_asignada?: string | null;
+  wisphub_sync: "pendiente" | "pending" | "registrado" | "vinculado" | "error";
+  wisphub_task_id?: string | null;
   wisphub_error?: string;
 }
 
@@ -79,11 +80,6 @@ export interface InstalacionCreate {
   telefono?: string | null;
   telefono2?: string | null;
   direccion?: string | null;
-  router_id: number;
-  router_nombre?: string | null;
-  plan_id: number;
-  plan_nombre?: string | null;
-  ip_asignada: string;
 }
 
 export interface TareaCreate {
@@ -112,11 +108,22 @@ export interface AsignarTecnico {
   tecnico_id: number;
 }
 
+export interface CompletarInstalacionDatos {
+  router_id: number;
+  router_nombre?: string | null;
+  zona_id?: number | null;
+  zona_nombre?: string | null;
+  plan_id: number;
+  plan_nombre?: string | null;
+  ip_asignada: string;
+}
+
 export interface TransicionEstado {
   estado_nuevo: EstadoTarea;
   comentario?: string | null;
   lat_evento?: number | null;
   lng_evento?: number | null;
+  completar_instalacion?: CompletarInstalacionDatos | null;
 }
 
 export interface TareaFiltros {

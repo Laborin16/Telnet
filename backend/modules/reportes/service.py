@@ -10,7 +10,7 @@ from modules.cliente_historial.enums import TipoEvento
 from modules.cliente_historial.service import registrar_evento
 from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
 from modules.reportes.models import Tarea, TareaEvento, TareaFoto
-from modules.reportes.schemas import AsignarTecnico, TareaCreate, TareaUpdate, TransicionEstado, VincularServicio
+from modules.reportes.schemas import AsignarTecnico, CompletarInstalacionDatos, InstalacionDatosUpdate, TareaCreate, TareaUpdate, TransicionEstado, VincularServicio
 from modules.reportes.state_machine import validar_transicion
 
 MEDIA_DIR = Path("media/fotos")
@@ -31,55 +31,16 @@ async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Ta
     datos_instalacion: dict | None = None
     if datos.tipo == TipoTarea.INSTALACION and datos.instalacion:
         ins = datos.instalacion
-        from core.wisphub.client import wisphub_client
-
-        # Derivar zona del router si no viene en el payload
-        zona_id = ins.zona_id
-        zona_nombre = ins.zona_nombre
-        if zona_id is None:
-            zona_info = await wisphub_client.obtener_zona_de_router(ins.router_id)
-            if zona_info:
-                zona_id = zona_info.get("id")
-                zona_nombre = zona_info.get("nombre")
-
+        # En este flujo solo guardamos datos del cliente. Router/plan/IP se
+        # capturan al transicionar a COMPLETADO, donde también se crea el
+        # cliente en WispHub.
         datos_instalacion = {
             "nombre_cliente": ins.nombre_cliente,
             "telefono": ins.telefono,
             "telefono2": ins.telefono2,
             "direccion": ins.direccion,
-            "router_id": ins.router_id,
-            "router_nombre": ins.router_nombre,
-            "zona_id": zona_id,
-            "zona_nombre": zona_nombre,
-            "plan_id": ins.plan_id,
-            "plan_nombre": ins.plan_nombre,
-            "ip_asignada": ins.ip_asignada,
-            "wisphub_sync": "pending",
-            "wisphub_task_id": None,
+            "wisphub_sync": "pendiente",
         }
-        try:
-            wh_payload: dict = {
-                "usuario_rb": ins.ip_asignada,
-                "ip": ins.ip_asignada,
-                "plan_internet": ins.plan_id,
-                "nombre": ins.nombre_cliente,
-                "router": ins.router_id,
-            }
-            if ins.telefono:
-                wh_payload["telefono"] = ins.telefono
-            if ins.telefono2:
-                wh_payload["telefono_2"] = ins.telefono2
-            if ins.direccion:
-                wh_payload["direccion"] = ins.direccion
-            wh_resp = await wisphub_client.crear_cliente(zona_id, wh_payload)
-            datos_instalacion["wisphub_task_id"] = (
-                wh_resp.get("task_id") or wh_resp.get("id") or wh_resp.get("celery_task_id")
-            )
-            datos_instalacion["wisphub_sync"] = "registrado"
-            datos_instalacion["wisphub_resp"] = wh_resp
-        except Exception as exc:
-            datos_instalacion["wisphub_sync"] = "error"
-            datos_instalacion["wisphub_error"] = str(exc)
 
     tarea = Tarea(
         id_servicio=datos.id_servicio,
@@ -247,6 +208,10 @@ async def transicionar_estado(tarea_id: int, datos: TransicionEstado, usuario: d
 
     validar_transicion(estado_actual, estado_nuevo, datos.comentario)
 
+    # INSTALACION → COMPLETADO: pide router/plan/IP y crea cliente en WispHub.
+    if estado_nuevo == EstadoTarea.COMPLETADO and tarea.tipo == TipoTarea.INSTALACION:
+        await _completar_instalacion(tarea, datos.completar_instalacion)
+
     tarea.estado = estado_nuevo
     tarea.updated_at = datetime.now()
 
@@ -411,6 +376,38 @@ async def actualizar_tarea(tarea_id: int, datos: TareaUpdate, usuario: dict, db:
     return tarea
 
 
+async def eliminar_tarea(tarea_id: int, usuario: dict, db: AsyncSession) -> None:
+    from sqlalchemy import delete
+    tarea = await _obtener_tarea_o_404(tarea_id, db)
+    # Cascada explícita: SQLite no respeta ON DELETE CASCADE por defecto.
+    await db.execute(delete(TareaEvento).where(TareaEvento.tarea_id == tarea_id))
+    await db.execute(delete(TareaFoto).where(TareaFoto.tarea_id == tarea_id))
+    await db.delete(tarea)
+    await db.commit()
+
+
+async def actualizar_datos_instalacion(tarea_id: int, datos: InstalacionDatosUpdate, usuario: dict, db: AsyncSession) -> Tarea:
+    tarea = await _obtener_tarea_o_404(tarea_id, db)
+
+    if not _es_supervisor(usuario):
+        raise PermissionError("Solo supervisores pueden editar los datos del cliente")
+    if tarea.tipo != TipoTarea.INSTALACION:
+        raise ValueError("Solo se pueden editar datos de cliente en tareas de instalación.")
+    if tarea.estado in (EstadoTarea.COMPLETADO, EstadoTarea.CANCELADO):
+        raise ValueError("La tarea ya está cerrada; no se pueden editar los datos del cliente.")
+
+    actualizados = datos.model_dump(exclude_unset=True)
+    if not actualizados:
+        return tarea
+
+    base = tarea.datos_instalacion or {}
+    tarea.datos_instalacion = {**base, **actualizados}
+    tarea.updated_at = datetime.now()
+    await db.commit()
+    await db.refresh(tarea)
+    return tarea
+
+
 async def listar_eventos(tarea_id: int, usuario: dict, db: AsyncSession) -> list[TareaEvento]:
     await obtener_tarea(tarea_id, usuario, db)  # valida acceso
 
@@ -430,6 +427,83 @@ async def _obtener_tarea_o_404(tarea_id: int, db: AsyncSession) -> Tarea:
     if tarea is None:
         raise ValueError("Tarea no encontrada")
     return tarea
+
+
+async def _completar_instalacion(tarea: Tarea, completar: CompletarInstalacionDatos | None) -> None:
+    """Valida IP disponible, crea cliente en WispHub y deja `datos_instalacion`
+    actualizado con la respuesta. Lanza ValueError si falta data o la IP ya está
+    ocupada (la transición se aborta antes de tocar el estado)."""
+    if completar is None:
+        raise ValueError("Para completar una instalación se requieren router, plan e IP.")
+
+    from core.wisphub.client import wisphub_client
+
+    # Valida que la IP esté en la lista de disponibles del router.
+    ips_info = await wisphub_client.obtener_ips_disponibles(completar.router_id)
+    disponibles = set(ips_info.get("disponibles", []))
+    if completar.ip_asignada not in disponibles:
+        raise ValueError(f"La IP {completar.ip_asignada} ya no está disponible en el router seleccionado.")
+
+    # Derivar zona del router si no vino en el payload.
+    zona_id = completar.zona_id
+    zona_nombre = completar.zona_nombre
+    if zona_id is None:
+        zona_info = await wisphub_client.obtener_zona_de_router(completar.router_id)
+        if zona_info:
+            zona_id = zona_info.get("id")
+            zona_nombre = zona_info.get("nombre")
+
+    base = tarea.datos_instalacion or {}
+    nombre = base.get("nombre_cliente", "")
+    wh_payload: dict = {
+        "usuario_rb": nombre,
+        "ip": completar.ip_asignada,
+        "plan_internet": completar.plan_id,
+        "nombre": nombre,
+        "router": completar.router_id,
+    }
+    if base.get("telefono"):
+        wh_payload["telefono"] = base["telefono"]
+    if base.get("telefono2"):
+        wh_payload["telefono_2"] = base["telefono2"]
+    if base.get("direccion"):
+        wh_payload["direccion"] = base["direccion"]
+
+    try:
+        wh_resp = await wisphub_client.crear_cliente(zona_id, wh_payload)
+    except Exception as exc:
+        raise ValueError(f"Error al registrar en WispHub: {exc}") from exc
+
+    # WispHub responde HTTP 200 incluso cuando rechaza el alta — devuelve
+    # `warning` con los errores de validación. Detectarlo y propagar.
+    warnings = wh_resp.get("warning") or wh_resp.get("warnings")
+    if warnings:
+        msg_partes = []
+        for w in (warnings if isinstance(warnings, list) else [warnings]):
+            if isinstance(w, dict):
+                for campo, msgs in w.items():
+                    msg_partes.append(f"{campo}: {' '.join(msgs) if isinstance(msgs, list) else msgs}")
+            else:
+                msg_partes.append(str(w))
+        raise ValueError(f"WispHub rechazó el alta: {' | '.join(msg_partes)}")
+
+    task_id = wh_resp.get("task_id") or wh_resp.get("id") or wh_resp.get("celery_task_id")
+    if not task_id:
+        raise ValueError(f"WispHub no devolvió un ID de tarea/cliente. Respuesta: {wh_resp}")
+
+    tarea.datos_instalacion = {
+        **base,
+        "router_id": completar.router_id,
+        "router_nombre": completar.router_nombre,
+        "zona_id": zona_id,
+        "zona_nombre": zona_nombre,
+        "plan_id": completar.plan_id,
+        "plan_nombre": completar.plan_nombre,
+        "ip_asignada": completar.ip_asignada,
+        "wisphub_sync": "registrado",
+        "wisphub_task_id": task_id,
+        "wisphub_resp": wh_resp,
+    }
 
 
 async def subir_foto(tarea_id: int, nombre_original: str, contenido: bytes, usuario: dict, db: AsyncSession) -> TareaFoto:

@@ -3,11 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import {
   HardHat, Wrench, Package, PlugZap, Truck, ClipboardList,
-  Clock, User as UserIcon,
+  Clock, User as UserIcon, Trash2,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { useTareas } from "../hooks/useTareas";
+import { useEliminarTarea } from "../hooks/useTareaActions";
 import { useDebounce } from "../../../shared/hooks/useDebounce";
 import apiClient from "../../../core/api/apiClient";
 import { RecoleccionTab } from "../../finanzas/components/RecoleccionTab";
@@ -97,7 +98,9 @@ type RangoRapido = "todo" | "hoy" | "semana" | "mes" | "personalizado";
 export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
   const { user } = useAuth();
   const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
+  const esAdmin = user?.rol === "administrador";
   const esVentas = user?.rol === "ventas";
+  const { mutate: eliminarTareaMut } = useEliminarTarea();
   const [subTab, setSubTab]                     = useState<"lista" | "dashboard" | "recoleccion">("lista");
   const [estadoFiltro, setEstadoFiltro]         = useState<EstadoTarea | "">("");
   const [prioridadFiltro, setPrioridadFiltro]   = useState<PrioridadTarea | "">("");
@@ -470,6 +473,11 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
               busqueda={debouncedBusqueda}
               tecnicoNombre={tarea.tecnico_id != null ? (usuarios.find(u => u.id === tarea.tecnico_id)?.nombre ?? null) : null}
               onClick={() => onSelectTarea(tarea.id)}
+              onEliminar={esAdmin ? () => {
+                if (window.confirm(`¿Eliminar la tarea #${tarea.id}? Esta acción no se puede deshacer.`)) {
+                  eliminarTareaMut(tarea.id);
+                }
+              } : undefined}
             />
           ))}
         </div>
@@ -657,7 +665,7 @@ function resaltarTexto(texto: string, busqueda: string): React.ReactNode {
   );
 }
 
-function TareaCard({ tarea, busqueda = "", tecnicoNombre, onClick }: { tarea: Tarea; busqueda?: string; tecnicoNombre: string | null; onClick: () => void }) {
+function TareaCard({ tarea, busqueda = "", tecnicoNombre, onClick, onEliminar }: { tarea: Tarea; busqueda?: string; tecnicoNombre: string | null; onClick: () => void; onEliminar?: () => void }) {
   const estado = ESTADO_CONFIG[tarea.estado];
   const prioridad = PRIORIDAD_CONFIG[tarea.prioridad];
   const tipo = TIPO_CONFIG[tarea.tipo];
@@ -686,7 +694,7 @@ function TareaCard({ tarea, busqueda = "", tecnicoNombre, onClick }: { tarea: Ta
         (e.currentTarget as HTMLButtonElement).style.borderLeftColor = tipo.color;
       }}
     >
-      {/* Fila superior: estado + prioridad */}
+      {/* Fila superior: estado + prioridad + eliminar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
         <span style={{
           padding: "3px 10px", borderRadius: "12px",
@@ -696,9 +704,25 @@ function TareaCard({ tarea, busqueda = "", tecnicoNombre, onClick }: { tarea: Ta
         }}>
           {estado.label}
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-          <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: prioridad.color, display: "inline-block", flexShrink: 0 }} />
-          <span style={{ fontSize: "11px", color: prioridad.color, fontWeight: 600 }}>{prioridad.label}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: prioridad.color, display: "inline-block", flexShrink: 0 }} />
+            <span style={{ fontSize: "11px", color: prioridad.color, fontWeight: 600 }}>{prioridad.label}</span>
+          </div>
+          {onEliminar && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={e => { e.stopPropagation(); onEliminar(); }}
+              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onEliminar(); } }}
+              title="Eliminar tarea"
+              style={{ display: "inline-flex", alignItems: "center", padding: "3px", borderRadius: "5px", color: "#94a3b8", cursor: "pointer" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLSpanElement).style.color = "#dc2626"; (e.currentTarget as HTMLSpanElement).style.background = "#fef2f2"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLSpanElement).style.color = "#94a3b8"; (e.currentTarget as HTMLSpanElement).style.background = "transparent"; }}
+            >
+              <Trash2 size={14} />
+            </span>
+          )}
         </div>
       </div>
 

@@ -4,9 +4,8 @@ import apiClient from "../../../core/api/apiClient";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { useAllClients } from "../../clients/hooks/useAllClients";
 import { useCrearTarea } from "../hooks/useTareaActions";
-import { fetchPlanes, fetchRouters, fetchIpsDisponibles } from "../api/reportes.api";
 import type { ClientItem } from "../../../core/types/client";
-import type { PrioridadTarea, TipoTarea, WispPlan, WispRouter, WispIPs } from "../types/reportes";
+import type { PrioridadTarea, TipoTarea } from "../types/reportes";
 
 // ── Opciones ───────────────────────────────────────────────────────────────────
 
@@ -235,16 +234,6 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
     queryFn: async () => (await apiClient.get("/api/v1/auth/usuarios")).data,
     staleTime: 60_000,
   });
-  const { data: planes = [] } = useQuery<WispPlan[]>({
-    queryKey: ["wisphub-planes"],
-    queryFn: fetchPlanes,
-    staleTime: 0,
-  });
-  const { data: routers = [] } = useQuery<WispRouter[]>({
-    queryKey: ["wisphub-routers"],
-    queryFn: fetchRouters,
-    staleTime: 5 * 60_000,
-  });
   const tecnicosActivos = usuarios.filter(u => u.activo && u.rol === "tecnico");
 
   const [prioridad, setPrioridad]   = useState<PrioridadTarea>("MEDIA");
@@ -260,41 +249,18 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
   const [telefono, setTelefono]     = useState("");
   const [telefono2, setTelefono2]   = useState("");
   const [direccion, setDireccion]   = useState("");
-  const [planId, setPlanId]         = useState("");
-  const [routerId, setRouterId]     = useState("");
-  const [ip, setIp]               = useState("");
-  const [ipManual, setIpManual]   = useState(false);
-
-  const routerIdNum = routerId ? Number(routerId) : undefined;
-  const EMPTY_IPS: WispIPs = { disponibles: [], ocupadas: [] };
-  const { data: ipsData = EMPTY_IPS, isFetching: cargandoIps } = useQuery<WispIPs>({
-    queryKey: ["wisphub-ips", routerIdNum],
-    queryFn: () => fetchIpsDisponibles(routerIdNum!),
-    staleTime: 0,
-    gcTime: 0,
-    enabled: !!routerIdNum,
-  });
-  const [mostrarOcupadas, setMostrarOcupadas] = useState(false);
-
-  const routerSeleccionado = routers.find(r => r.id === Number(routerId));
-  const planSeleccionado = planes.find(p => p.id === Number(planId));
-
-  const planesOrdenados = [...planes].sort((a, b) => {
-    const esPPa = /punto a punto/i.test(a.nombre);
-    const esPPb = /punto a punto/i.test(b.nombre);
-    if (esPPa !== esPPb) return esPPa ? 1 : -1;
-    const numA = parseFloat(a.nombre.replace(/[^\d.]/g, "")) || 0;
-    const numB = parseFloat(b.nombre.replace(/[^\d.]/g, "")) || 0;
-    return numB - numA;
-  });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!nombre.trim()) { setError("El nombre del cliente es obligatorio."); return; }
-    if (!routerId)      { setError("Selecciona un router."); return; }
-    if (!planId)        { setError("Selecciona un plan."); return; }
-    if (!ip.trim())     { setError("La IP asignada es obligatoria."); return; }
     if (!descripcion.trim()) { setError("La descripción es obligatoria."); return; }
+    for (const [label, val] of [["Teléfono 1", telefono], ["Teléfono 2", telefono2]] as const) {
+      const limpio = val.replace(/[\s\-()]/g, "");
+      if (limpio && !/^\d{8,14}(,\d{8,14})*$/.test(limpio)) {
+        setError(`${label} inválido. Usa 8-14 dígitos sin código de país. Para varios, separa por coma.`);
+        return;
+      }
+    }
     const horarioParcial = (fechaProgram || horaInicio || horaFin) && !(fechaProgram && horaInicio && horaFin);
     if (horarioParcial) {
       setError("Completa fecha, hora de inicio y hora de fin, o quita el horario."); return;
@@ -318,11 +284,6 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
           telefono: telefono.trim() || null,
           telefono2: telefono2.trim() || null,
           direccion: direccion.trim() || null,
-          router_id: Number(routerId),
-          router_nombre: routerSeleccionado?.nombre ?? null,
-          plan_id: Number(planId),
-          plan_nombre: planSeleccionado?.nombre ?? null,
-          ip_asignada: ip.trim(),
         },
       },
       { onSuccess: onClose, onError: (err: unknown) => setError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Error al crear la instalación.") }
@@ -332,7 +293,6 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
   return (
     <form onSubmit={handleSubmit} style={{ padding: "18px 24px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
 
-      {/* Sección datos del cliente */}
       <SectionTitle>Datos del cliente</SectionTitle>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -342,11 +302,16 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
         </div>
         <div>
           <label style={labelStyle}>Teléfono 1</label>
-          <input value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="Ej. 644 123 4567" style={inputStyle} />
+          <input value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="Ej. 6441234567" style={inputStyle} />
         </div>
         <div>
           <label style={labelStyle}>Teléfono 2</label>
-          <input value={telefono2} onChange={e => setTelefono2(e.target.value)} placeholder="Ej. 644 987 6543" style={inputStyle} />
+          <input value={telefono2} onChange={e => setTelefono2(e.target.value)} placeholder="Ej. 6449876543" style={inputStyle} />
+        </div>
+        <div style={{ gridColumn: "1 / -1", marginTop: "-8px" }}>
+          <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+            8-14 dígitos sin código de país. Varios separados por coma.
+          </span>
         </div>
         <div style={{ gridColumn: "1 / -1" }}>
           <label style={labelStyle}>Dirección</label>
@@ -354,96 +319,6 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {/* Sección datos técnicos */}
-      <SectionTitle>Datos técnicos (WispHub)</SectionTitle>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div style={{ gridColumn: "1 / -1" }}>
-          <label style={labelStyle}>Plan de internet *</label>
-          <select value={planId} onChange={e => setPlanId(e.target.value)} style={selectStyle} required>
-            <option value="">— Seleccionar —</option>
-            {planesOrdenados.map(p => <option key={p.id} value={p.id}>{p.nombre}{p.precio ? ` — $${p.precio}` : ""}</option>)}
-          </select>
-        </div>
-        <div style={{ gridColumn: "1 / -1" }}>
-          <label style={labelStyle}>Router *</label>
-          <select
-            value={routerId}
-            onChange={e => { setRouterId(e.target.value); setIp(""); setIpManual(false); }}
-            style={selectStyle}
-            required
-          >
-            <option value="">— Seleccionar router —</option>
-            {routers.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-          </select>
-        </div>
-
-        <div style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
-            <label style={{ ...labelStyle, marginBottom: 0 }}>IP asignada *</label>
-            <button
-              type="button"
-              onClick={() => { setIpManual(m => !m); setIp(""); }}
-              style={{ fontSize: "11px", color: "#2563eb", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}
-            >
-              {ipManual ? "← Ver disponibles" : "Escribir manualmente"}
-            </button>
-          </div>
-
-          {!routerIdNum ? (
-            <input disabled placeholder="Selecciona un router primero" style={{ ...inputStyle, color: "#94a3b8" }} />
-          ) : ipManual ? (
-            <input
-              value={ip}
-              onChange={e => setIp(e.target.value)}
-              placeholder="Ej. 192.168.1.100"
-              style={inputStyle}
-              required
-            />
-          ) : (
-            <select
-              value={ip}
-              onChange={e => setIp(e.target.value)}
-              style={selectStyle}
-              required
-              disabled={cargandoIps}
-            >
-              <option value="">
-                {cargandoIps ? "Cargando IPs..." : ipsData.disponibles.length === 0 ? "Sin IPs disponibles" : "— Seleccionar IP —"}
-              </option>
-              {ipsData.disponibles.map(ipStr => (
-                <option key={ipStr} value={ipStr}>{ipStr}</option>
-              ))}
-            </select>
-          )}
-
-          {/* Panel de IPs ocupadas */}
-          {routerIdNum && !cargandoIps && ipsData.ocupadas.length > 0 && (
-            <div style={{ marginTop: "6px" }}>
-              <button
-                type="button"
-                onClick={() => setMostrarOcupadas(m => !m)}
-                style={{ fontSize: "11px", color: "#64748b", background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <span>{mostrarOcupadas ? "▲" : "▼"}</span>
-                {ipsData.ocupadas.length} IPs ocupadas
-              </button>
-              {mostrarOcupadas && (
-                <div style={{ marginTop: "6px", maxHeight: "160px", overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: "7px", fontSize: "12px" }}>
-                  {ipsData.ocupadas.map(o => (
-                    <div key={o.ip} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 10px", borderBottom: "1px solid #f1f5f9" }}>
-                      <span style={{ fontFamily: "monospace", color: "#dc2626", fontWeight: 600 }}>{o.ip}</span>
-                      <span style={{ color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "60%" }}>{o.nombre}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Sección tarea */}
       <SectionTitle>Tarea de instalación</SectionTitle>
 
       <PrioridadSelector value={prioridad} onChange={setPrioridad} />
@@ -460,14 +335,13 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
         horaFin={horaFin} onHoraFin={setHoraFin}
       />
 
-      {/* Aviso WispHub */}
-      <div style={{ padding: "10px 12px", borderRadius: "8px", background: "#f0fdf4", border: "1px solid #86efac", fontSize: "12px", color: "#15803d", display: "flex", gap: "8px", alignItems: "flex-start" }}>
-        <span style={{ flexShrink: 0 }}>🔗</span>
-        <span>Al crear esta tarea se registrará automáticamente el cliente en WispHub con el plan y zona seleccionados.</span>
+      <div style={{ padding: "10px 12px", borderRadius: "8px", background: "#fefce8", border: "1px solid #fde68a", fontSize: "12px", color: "#854d0e", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+        <span style={{ flexShrink: 0 }}>ℹ</span>
+        <span>El plan, router e IP se capturan al marcar la tarea como completada. El cliente se registra en WispHub en ese momento.</span>
       </div>
 
       <ErrorMsg msg={error} />
-      <Acciones isPending={isPending} onClose={onClose} label={isPending ? "Registrando..." : "Crear instalación"} color="#16a34a" />
+      <Acciones isPending={isPending} onClose={onClose} label={isPending ? "Creando..." : "Crear instalación"} color="#16a34a" />
     </form>
   );
 }

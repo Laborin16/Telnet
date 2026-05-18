@@ -3,6 +3,7 @@ import {
   actualizarTarea,
   asignarTecnico,
   crearTarea,
+  eliminarTarea,
   subirFoto,
   transicionarEstado,
 } from "../api/reportes.api";
@@ -26,6 +27,19 @@ export function useCrearTarea() {
       addToast("Tarea creada correctamente", "success");
     },
     onError: (e) => addToast(e.message || "Error al crear tarea", "error"),
+  });
+}
+
+export function useEliminarTarea() {
+  const queryClient = useQueryClient();
+  const { addToast } = useToast();
+  return useMutation<void, Error, number>({
+    mutationFn: eliminarTarea,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tareas"] });
+      addToast("Tarea eliminada", "success");
+    },
+    onError: (e) => addToast(e.message || "Error al eliminar tarea", "error"),
   });
 }
 

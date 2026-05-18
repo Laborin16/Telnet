@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Any
 
@@ -6,26 +7,88 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
 
 
+# Formato requerido por WispHub: 8-14 dígitos sin código de país. Múltiples
+# números se separan por coma.
+_TELEFONO_RE = re.compile(r"^\d{8,14}(,\d{8,14})*$")
+
+
+def _validar_telefono(v: str | None) -> str | None:
+    if v is None:
+        return v
+    limpio = re.sub(r"[\s\-()]", "", v)
+    if not limpio:
+        return None
+    if not _TELEFONO_RE.match(limpio):
+        raise ValueError(
+            "Formato inválido. Usa 8-14 dígitos sin código de país (ej. 6441234567). "
+            "Para varios números, sepáralos por coma."
+        )
+    return limpio
+
+
 class InstalacionDatos(BaseModel):
-    """Datos del nuevo cliente para tareas de tipo INSTALACION."""
+    """Datos del nuevo cliente para tareas de tipo INSTALACION (al crear)."""
     nombre_cliente: str
     telefono: str | None = None
     telefono2: str | None = None
     direccion: str | None = None
-    router_id: int
-    router_nombre: str | None = None
-    zona_id: int | None = None       # derivado del router al crear
-    zona_nombre: str | None = None
-    plan_id: int
-    plan_nombre: str | None = None
-    ip_asignada: str
 
-    @field_validator("nombre_cliente", "ip_asignada")
+    @field_validator("nombre_cliente")
     @classmethod
     def no_vacio(cls, v: str) -> str:
         v = v.strip()
         if not v:
             raise ValueError("Este campo no puede estar vacío")
+        return v
+
+    @field_validator("telefono", "telefono2")
+    @classmethod
+    def validar_tel(cls, v: str | None) -> str | None:
+        return _validar_telefono(v)
+
+
+class InstalacionDatosUpdate(BaseModel):
+    """Edición de los datos del cliente de una INSTALACION (antes de completar)."""
+    nombre_cliente: str | None = None
+    telefono: str | None = None
+    telefono2: str | None = None
+    direccion: str | None = None
+
+    @field_validator("nombre_cliente")
+    @classmethod
+    def nombre_no_vacio(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                raise ValueError("El nombre no puede estar vacío")
+        return v
+
+    @field_validator("telefono", "telefono2")
+    @classmethod
+    def validar_tel(cls, v: str | None) -> str | None:
+        return _validar_telefono(v)
+
+
+class CompletarInstalacionDatos(BaseModel):
+    """Datos técnicos requeridos al marcar COMPLETADO una tarea INSTALACION.
+
+    Se valida que la IP exista en `obtener_ips_disponibles(router_id)` y se
+    crea el cliente en WispHub al completar (no antes).
+    """
+    router_id: int
+    router_nombre: str | None = None
+    zona_id: int | None = None
+    zona_nombre: str | None = None
+    plan_id: int
+    plan_nombre: str | None = None
+    ip_asignada: str
+
+    @field_validator("ip_asignada")
+    @classmethod
+    def ip_no_vacia(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("La IP no puede estar vacía")
         return v
 
 
@@ -92,6 +155,8 @@ class TransicionEstado(BaseModel):
     comentario: str | None = None
     lat_evento: float | None = None
     lng_evento: float | None = None
+    # Solo requerido al completar una tarea INSTALACION
+    completar_instalacion: CompletarInstalacionDatos | None = None
 
     @field_validator("comentario")
     @classmethod
