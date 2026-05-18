@@ -10,6 +10,7 @@ class RolUsuario(str, enum.Enum):
     SUPERVISOR    = "supervisor"
     TECNICO       = "tecnico"
     COBRANZA      = "cobranza"
+    VENTAS        = "ventas"
 
 
 class Usuario(Base):

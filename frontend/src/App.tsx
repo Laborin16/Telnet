@@ -23,7 +23,7 @@ import { usePushSubscription } from "./modules/reportes/hooks/usePushSubscriptio
 import apiClient from "./core/api/apiClient";
 
 type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "calendario" | "usuarios";
-type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza";
+type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza" | "ventas";
 const PAGE_SIZE = 25;
 const ALERTA_ORDER: Record<string, number> = { critico: 0, pendiente: 1, suspendido: 2, normal: 3 };
 
@@ -32,7 +32,7 @@ const NAV_ITEMS: { key: Tab; label: string; icon: ReactNode; roles: RolUsuario[]
   { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} />, roles: ["administrador", "supervisor", "cobranza"] },
   { key: "finanzas",  label: "Finanzas",  icon: <Banknote size={16} />,        roles: ["administrador", "cobranza"] },
   { key: "auditoria", label: "Auditoría", icon: <ClipboardList size={16} />,   roles: ["administrador"] },
-  { key: "tareas",      label: "Tareas",      icon: <Wrench size={16} />,        roles: ["administrador", "supervisor", "tecnico"] },
+  { key: "tareas",      label: "Tareas",      icon: <Wrench size={16} />,        roles: ["administrador", "supervisor", "tecnico", "ventas"] },
   { key: "calendario",  label: "Calendario",  icon: <CalendarDays size={16} />, roles: ["administrador", "supervisor", "tecnico"] },
   { key: "usuarios",    label: "Usuarios",    icon: <KeyRound size={16} />,     roles: ["administrador"] },
 ];
@@ -52,7 +52,7 @@ export default function App() {
 
 function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth>["user"]>; logout: () => void }) {
   const userRol = (user.rol ?? (user.es_admin ? "administrador" : "tecnico")) as RolUsuario;
-  const defaultTab: Tab = userRol === "tecnico" ? "tareas" : "clientes";
+  const defaultTab: Tab = userRol === "tecnico" || userRol === "ventas" ? "tareas" : "clientes";
   const [tab, setTab]       = useState<Tab>(defaultTab);
   const [page, setPage]     = useState(1);
   const [search, setSearch] = useState("");

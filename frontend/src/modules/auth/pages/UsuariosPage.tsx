@@ -4,12 +4,13 @@ import apiClient from "../../../core/api/apiClient";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../../../shared/hooks/useToast";
 
-type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza";
+type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza" | "ventas";
 
 const ROL_META: Record<RolUsuario, { label: string; color: string; bg: string; border: string }> = {
   administrador: { label: "Admin",      color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
   supervisor:    { label: "Supervisor", color: "#0e7490", bg: "#ecfeff", border: "#a5f3fc" },
   cobranza:      { label: "Cobranza",   color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
+  ventas:        { label: "Ventas",     color: "#ea580c", bg: "#fff7ed", border: "#fdba74" },
   tecnico:       { label: "Técnico",    color: "#64748b", bg: "#f8fafc", border: "#e2e8f0" },
 };
 

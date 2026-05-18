@@ -4,6 +4,8 @@ from db.session import get_db
 from core.dependencies import get_wisphub_client, get_usuario, requerir_autenticado
 from modules.clients.service import ClientService
 from modules.auditlog.service import log_accion
+from modules.cliente_historial.enums import TipoEvento
+from modules.cliente_historial.service import registrar_evento
 
 router = APIRouter()
 
@@ -51,6 +53,14 @@ async def suspend_client(
         descripcion=f"Servicio suspendido — id_servicio #{client_id}",
         datos_extra={"id_servicio": client_id},
     )
+    await registrar_evento(
+        db,
+        id_servicio=client_id,
+        tipo_evento=TipoEvento.SERVICIO_SUSPENDIDO,
+        titulo="Servicio suspendido",
+        usuario=usuario,
+    )
+    await db.commit()
     return result
 
 
@@ -72,4 +82,12 @@ async def activate_client(
         descripcion=f"Servicio activado — id_servicio #{client_id}",
         datos_extra={"id_servicio": client_id},
     )
+    await registrar_evento(
+        db,
+        id_servicio=client_id,
+        tipo_evento=TipoEvento.SERVICIO_REACTIVADO,
+        titulo="Servicio reactivado",
+        usuario=usuario,
+    )
+    await db.commit()
     return result

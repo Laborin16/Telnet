@@ -29,7 +29,7 @@ async def crear_tarea(
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
-    _requerir_admin(usuario)
+    _requerir_puede_crear(usuario, datos.tipo)
     try:
         tarea = await service.crear_tarea(datos, usuario, db)
     except ValueError as e:
@@ -256,3 +256,14 @@ def _requerir_admin(usuario: dict) -> None:
     rol = usuario.get("rol")
     if rol not in ("administrador", "supervisor") and not usuario.get("es_admin", False):
         raise HTTPException(status_code=403, detail="Solo administradores o supervisores pueden realizar esta acción")
+
+
+def _requerir_puede_crear(usuario: dict, tipo: TipoTarea) -> None:
+    """Permite crear tareas a admin/supervisor (cualquier tipo) y a ventas (solo INSTALACION)."""
+    _requerir_autenticado(usuario)
+    rol = usuario.get("rol")
+    if rol in ("administrador", "supervisor") or usuario.get("es_admin", False):
+        return
+    if rol == "ventas" and tipo == TipoTarea.INSTALACION:
+        return
+    raise HTTPException(status_code=403, detail="No tienes permiso para crear este tipo de tarea")

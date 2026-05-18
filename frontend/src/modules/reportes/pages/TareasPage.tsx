@@ -50,6 +50,17 @@ const ESTADOS_FILTRO: { value: EstadoTarea | ""; label: string }[] = [
   { value: "CANCELADO",   label: "Cancelado" },
 ];
 
+// Tipos que se pueden crear desde el formulario "Nueva tarea"
+// (INSTALACION + los 5 tipos regulares). Debe mantenerse en sync con NuevaTareaModal.tsx.
+const TIPOS_FILTRABLES: TipoTarea[] = [
+  "INSTALACION",
+  "SERVICIO",
+  "RECOLECCION",
+  "RECONEXION",
+  "CAMBIO_DOMICILIO",
+  "TRABAJO_GENERAL",
+];
+
 // ── Componente principal ───────────────────────────────────────────────────────
 
 interface TareasPageProps {
@@ -64,6 +75,7 @@ type RangoRapido = "todo" | "hoy" | "semana" | "mes" | "personalizado";
 export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
   const { user } = useAuth();
   const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
+  const esVentas = user?.rol === "ventas";
   const [subTab, setSubTab]                     = useState<"lista" | "dashboard">("lista");
   const [estadoFiltro, setEstadoFiltro]         = useState<EstadoTarea | "">("");
   const [prioridadFiltro, setPrioridadFiltro]   = useState<PrioridadTarea | "">("");
@@ -152,25 +164,31 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
 
       {/* ── Sub-tabs ──────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: "4px", background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", padding: "3px" }}>
-          {(["lista", "dashboard"] as const).map(t => (
-            <button key={t} onClick={() => setSubTab(t)} style={{
-              padding: "5px 16px", borderRadius: "6px", border: "none",
-              background: subTab === t ? "#2563eb" : "transparent",
-              color: subTab === t ? "white" : "#64748b",
-              fontSize: "13px", fontWeight: subTab === t ? 600 : 400, cursor: "pointer",
-            }}>
-              {t === "lista" ? "Lista" : "Dashboard"}
-            </button>
-          ))}
-        </div>
-        {puedeGestionar && onNuevaTarea && (
+        {!esVentas ? (
+          <div style={{ display: "flex", gap: "4px", background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", padding: "3px" }}>
+            {(["lista", "dashboard"] as const).map(t => (
+              <button key={t} onClick={() => setSubTab(t)} style={{
+                padding: "5px 16px", borderRadius: "6px", border: "none",
+                background: subTab === t ? "#2563eb" : "transparent",
+                color: subTab === t ? "white" : "#64748b",
+                fontSize: "13px", fontWeight: subTab === t ? 600 : 400, cursor: "pointer",
+              }}>
+                {t === "lista" ? "Lista" : "Dashboard"}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>
+            Instalaciones
+          </h2>
+        )}
+        {(puedeGestionar || esVentas) && onNuevaTarea && (
           <button onClick={onNuevaTarea} style={{
             padding: "6px 16px", borderRadius: "7px", border: "none",
             background: "#2563eb", color: "white",
             fontSize: "13px", fontWeight: 600, cursor: "pointer",
           }}>
-            + Nueva tarea
+            {esVentas ? "+ Nueva instalación" : "+ Nueva tarea"}
           </button>
         )}
       </div>
@@ -315,6 +333,39 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
               </button>
             );
           })}
+        </div>
+
+        {/* Filtro por tipo de tarea (solo los tipos creables desde el formulario) */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
+          <span style={labelStyle}>Tipo:</span>
+          <select
+            value={tipoFiltro}
+            onChange={e => setTipoFiltro(e.target.value as TipoTarea | "")}
+            style={{
+              padding: "4px 10px", borderRadius: "6px", fontSize: "12px",
+              border: tipoFiltro ? "1px solid #6366f1" : "1px solid #e2e8f0",
+              background: tipoFiltro ? "#eef2ff" : "#f8fafc",
+              color: tipoFiltro ? "#4338ca" : "#64748b",
+              cursor: "pointer", outline: "none",
+            }}
+          >
+            <option value="">Todos los tipos</option>
+            {TIPOS_FILTRABLES.map(value => (
+              <option key={value} value={value}>{TIPO_LABEL[value]}</option>
+            ))}
+          </select>
+          {tipoFiltro && (
+            <button
+              onClick={() => setTipoFiltro("")}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: "11px", color: "#94a3b8", padding: "2px 4px",
+              }}
+              aria-label="Limpiar filtro de tipo"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Filtro por técnico (solo admins/supervisores) */}

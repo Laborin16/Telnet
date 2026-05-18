@@ -11,8 +11,33 @@ const PX_HORA = 64;
 const HORA_INICIO = 7;
 const HORA_FIN = 21;
 const HORAS = Array.from({ length: HORA_FIN - HORA_INICIO + 1 }, (_, i) => HORA_INICIO + i);
+const SPINE_W = 68;          // ancho de la columna de horas
 
-const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const DIAS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
+
+// ── Design tokens ─────────────────────────────────────────────────────────────
+
+const C = {
+  ink900: "#0f172a", ink700: "#334155", ink500: "#64748b",
+  ink400: "#94a3b8", ink300: "#cbd5e1",
+  surface: "#ffffff", spine: "#f8fafc", sunken: "#f1f5f9",
+  border: "#e2e8f0", borderStrong: "#cbd5e1", halfHour: "#eef2f6",
+  todayTint: "#f5f8ff",
+  accent: "#2563eb", accentSoft: "#dbeafe",
+  nowLine: "#1e293b",
+};
+const R = { sm: 6, md: 10, pill: 999 };
+const SH = {
+  flat: "0 1px 2px rgba(15,23,42,0.06)",
+  raised: "0 6px 18px rgba(15,23,42,0.12)",
+  ring: "0 0 0 2px #2563eb",
+};
+const PANEL: React.CSSProperties = {
+  background: C.surface,
+  borderRadius: R.md,
+  border: `1px solid ${C.border}`,
+  boxShadow: SH.flat,
+};
 
 // ── Colores por técnico (ciclados por ID) ─────────────────────────────────────
 
@@ -28,7 +53,7 @@ const PALETA = [
 ];
 
 const SIN_TECNICO = { bg: "#f1f5f9", border: "#94a3b8", text: "#475569" };
-const COMPLETADO = { bg: "#dcfce7", border: "#16a34a", text: "#15803d" };
+const COMPLETADO = { bg: "#86efac", border: "#15803d", text: "#14532d" };
 
 function colorTecnico(id: number | null) {
   if (id === null) return SIN_TECNICO;
@@ -242,29 +267,36 @@ export function CalendarPage({ onSelectTarea }: Props) {
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
 
       {/* ── Controles ──────────────────────────────────────────────────── */}
-      <div style={{
-        background: "white", borderRadius: "10px", border: "1px solid #e2e8f0",
-        padding: "12px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-        display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <button onClick={() => setWeekOffset(o => o - 1)} style={navBtnStyle}>← Anterior</button>
+      <div style={{ ...PANEL, padding: "12px 16px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <button onClick={() => setWeekOffset(o => o - 1)} style={navBtnStyle} aria-label="Semana anterior">‹</button>
           <button
             onClick={() => setWeekOffset(0)}
-            style={{ ...navBtnStyle, fontWeight: weekOffset === 0 ? 700 : 400, color: weekOffset === 0 ? "#2563eb" : "#334155", borderColor: weekOffset === 0 ? "#93c5fd" : "#e2e8f0" }}
+            style={{
+              ...navBtnStyle,
+              padding: "6px 14px",
+              fontWeight: weekOffset === 0 ? 700 : 500,
+              color: weekOffset === 0 ? C.accent : C.ink700,
+              borderColor: weekOffset === 0 ? C.accent : C.border,
+              background: weekOffset === 0 ? C.accentSoft : "white",
+            }}
           >
             Hoy
           </button>
-          <button onClick={() => setWeekOffset(o => o + 1)} style={navBtnStyle}>Siguiente →</button>
+          <button onClick={() => setWeekOffset(o => o + 1)} style={navBtnStyle} aria-label="Semana siguiente">›</button>
         </div>
-        <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a", flex: 1 }}>
+        <span style={{ fontSize: "15px", fontWeight: 700, color: C.ink900, flex: 1, letterSpacing: "-0.01em" }}>
           {fmtSemana(semana)}
         </span>
         {esAdmin && (
           <select
             value={tecnicoFiltro}
             onChange={e => setTecnicoFiltro(e.target.value ? Number(e.target.value) : "")}
-            style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #e2e8f0", fontSize: "12px", color: "#334155", background: "#f8fafc", cursor: "pointer", outline: "none" }}
+            style={{
+              padding: "7px 12px", borderRadius: R.sm, border: `1px solid ${C.border}`,
+              fontSize: "12px", color: C.ink700, background: C.spine, cursor: "pointer", outline: "none",
+              fontWeight: 600,
+            }}
           >
             <option value="">Todos los técnicos</option>
             {tecnicosEnSemana.map(t => (
@@ -307,64 +339,77 @@ export function CalendarPage({ onSelectTarea }: Props) {
       )}
 
       {/* ── Grid del calendario ─────────────────────────────────────────── */}
-      <div style={{
-        background: "white", borderRadius: "10px", border: "1px solid #e2e8f0",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.04)", overflow: "hidden",
-      }}>
-        {/* Cabecera de días */}
-        <div style={{ display: "grid", gridTemplateColumns: "52px repeat(7, 1fr)", borderBottom: "1px solid #e2e8f0" }}>
-          <div style={{ borderRight: "1px solid #e2e8f0" }} />
-          {semana.map((d, i) => {
-            const hoy = esHoy(d);
-            return (
-              <div
-                key={i}
-                style={{
-                  padding: "10px 8px", textAlign: "center", fontSize: "12px",
-                  fontWeight: 700, borderRight: i < 6 ? "1px solid #e2e8f0" : undefined,
-                  background: hoy ? "#eff6ff" : undefined,
-                  color: hoy ? "#1d4ed8" : d.getDay() === 0 || d.getDay() === 6 ? "#94a3b8" : "#334155",
-                }}
-              >
-                <div style={{ fontSize: "10px", fontWeight: 500, marginBottom: "2px" }}>{DIAS[i]}</div>
-                <div style={{
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  width: "26px", height: "26px", borderRadius: "50%",
-                  background: hoy ? "#2563eb" : undefined,
-                  color: hoy ? "white" : undefined,
-                  fontSize: "13px", fontWeight: hoy ? 800 : 600,
-                }}>
-                  {d.getDate()}
+      <div style={{ ...PANEL, overflow: "hidden" }}>
+        {/* Cuerpo scrollable con header sticky */}
+        <div style={{ overflowY: "auto", maxHeight: "72vh", position: "relative" }}>
+          {/* Cabecera de días (sticky) */}
+          <div style={{
+            display: "grid", gridTemplateColumns: `${SPINE_W}px repeat(7, 1fr)`,
+            borderBottom: `1px solid ${C.border}`,
+            position: "sticky", top: 0, zIndex: 20,
+            background: C.surface,
+          }}>
+            <div style={{ borderRight: `1px solid ${C.border}`, background: C.spine }} />
+            {semana.map((d, i) => {
+              const hoy = esHoy(d);
+              const finDeSemana = d.getDay() === 0 || d.getDay() === 6;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    padding: "10px 8px 12px", textAlign: "center",
+                    borderRight: i < 6 ? `1px solid ${C.border}` : undefined,
+                  }}
+                >
+                  <div style={{
+                    fontSize: "10px", fontWeight: 700, marginBottom: "6px",
+                    color: hoy ? C.accent : finDeSemana ? C.ink400 : C.ink500,
+                    letterSpacing: "0.08em",
+                  }}>
+                    {DIAS[i]}
+                  </div>
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: "30px", height: "30px", borderRadius: R.pill,
+                    background: hoy ? C.accent : "transparent",
+                    color: hoy ? "white" : finDeSemana ? C.ink400 : C.ink900,
+                    fontSize: "16px", fontWeight: hoy ? 700 : 600,
+                    fontVariantNumeric: "tabular-nums",
+                  }}>
+                    {d.getDate()}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
 
-        {/* Cuerpo: horas + columnas de días */}
-        <div style={{ overflowY: "auto", maxHeight: "70vh" }}>
           {isLoading && (
-            <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+            <div style={{ padding: "60px", textAlign: "center", color: C.ink400, fontSize: "13px" }}>
               Cargando tareas...
             </div>
           )}
           {!isLoading && (
-            <div style={{ display: "grid", gridTemplateColumns: "52px repeat(7, 1fr)", position: "relative" }}>
+            <div style={{ display: "grid", gridTemplateColumns: `${SPINE_W}px repeat(7, 1fr)`, position: "relative" }}>
               {/* Columna de horas */}
-              <div style={{ borderRight: "1px solid #e2e8f0" }}>
+              <div style={{ borderRight: `1px solid ${C.border}`, background: C.spine }}>
                 {HORAS.map(h => (
                   <div
                     key={h}
                     style={{
                       height: h === HORA_FIN ? "1px" : `${PX_HORA}px`,
                       display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
-                      paddingRight: "6px", paddingTop: "2px",
-                      borderTop: "1px solid #e2e8f0",
+                      paddingRight: "10px", paddingTop: "4px",
+                      borderTop: `1px solid ${C.border}`,
                     }}
                   >
                     {h < HORA_FIN && (
-                      <span style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 600, lineHeight: 1 }}>
-                        {String(h).padStart(2, "0")}:00
+                      <span style={{
+                        fontSize: "12px", color: C.ink700, fontWeight: 700,
+                        lineHeight: 1, fontVariantNumeric: "tabular-nums",
+                        letterSpacing: "0.02em",
+                      }}>
+                        {String(h).padStart(2, "0")}
+                        <span style={{ color: C.ink400, fontWeight: 500 }}>:00</span>
                       </span>
                     )}
                   </div>
@@ -382,20 +427,30 @@ export function CalendarPage({ onSelectTarea }: Props) {
                   <div
                     key={dayIdx}
                     style={{
-                      borderRight: dayIdx < 6 ? "1px solid #e2e8f0" : undefined,
+                      borderRight: dayIdx < 6 ? `1px solid ${C.border}` : undefined,
                       position: "relative",
-                      background: isWeekend ? "#fafafa" : hoy ? "#fefce8" : undefined,
+                      background: hoy ? C.todayTint : isWeekend ? C.spine : undefined,
                     }}
                   >
-                    {/* Líneas de hora */}
+                    {/* Líneas de hora (con marca media hora punteada) */}
                     {HORAS.map(h => (
                       <div
                         key={h}
                         style={{
                           height: h === HORA_FIN ? "1px" : `${PX_HORA}px`,
-                          borderTop: "1px solid #f1f5f9",
+                          borderTop: `1px solid ${C.border}`,
+                          position: "relative",
                         }}
-                      />
+                      >
+                        {h < HORA_FIN && (
+                          <div style={{
+                            position: "absolute",
+                            top: `${PX_HORA / 2}px`,
+                            left: 0, right: 0,
+                            borderTop: `1px dashed ${C.halfHour}`,
+                          }} />
+                        )}
+                      </div>
                     ))}
 
                     {/* Línea "ahora" */}
@@ -403,10 +458,14 @@ export function CalendarPage({ onSelectTarea }: Props) {
                       <div style={{
                         position: "absolute", left: 0, right: 0,
                         top: `${hoyLinea}px`,
-                        height: "2px", background: "#ef4444", zIndex: 10,
-                        boxShadow: "0 0 6px rgba(239,68,68,0.5)",
+                        height: "1px", background: C.nowLine, zIndex: 10,
                       }}>
-                        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444", marginTop: "-3px", marginLeft: "-4px" }} />
+                        <div style={{
+                          position: "absolute", left: "-5px", top: "-4px",
+                          width: "9px", height: "9px", borderRadius: R.pill,
+                          background: C.accent,
+                          boxShadow: `0 0 0 3px ${C.surface}`,
+                        }} />
                       </div>
                     )}
 
@@ -427,33 +486,50 @@ export function CalendarPage({ onSelectTarea }: Props) {
                           title={`${TIPO_LABEL[tarea.tipo]} #${tarea.id}\n${tecNombre}\n${inicioStr} – ${finStr}\n${ESTADO_LABEL[tarea.estado]}`}
                           style={{
                             position: "absolute",
-                            top: `${topPx + 1}px`,
-                            height: `${heightPx - 2}px`,
-                            left: `calc(${col * anchoBase}% + 2px)`,
-                            width: `calc(${anchoBase}% - 4px)`,
+                            top: `${topPx + 2}px`,
+                            height: `${heightPx - 4}px`,
+                            left: `calc(${col * anchoBase}% + 3px)`,
+                            width: `calc(${anchoBase}% - 6px)`,
                             background: c.bg,
                             borderLeft: `3px solid ${c.border}`,
-                            borderRadius: "5px",
-                            padding: "3px 5px",
+                            borderRadius: R.sm,
+                            padding: "4px 8px",
                             overflow: "hidden",
                             cursor: "pointer",
                             zIndex: 5,
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-                            transition: "box-shadow 0.1s",
+                            transition: "box-shadow 0.12s ease, transform 0.12s ease",
                           }}
-                          onMouseEnter={e => (e.currentTarget.style.boxShadow = "0 3px 8px rgba(0,0,0,0.18)")}
-                          onMouseLeave={e => (e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)")}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.boxShadow = SH.raised;
+                            e.currentTarget.style.zIndex = "6";
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.boxShadow = "";
+                            e.currentTarget.style.zIndex = "5";
+                          }}
                         >
-                          <div style={{ fontSize: "10px", fontWeight: 700, color: c.text, lineHeight: 1.2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                          <div style={{
+                            fontSize: "12px", fontWeight: 700, color: c.text,
+                            lineHeight: 1.25, overflow: "hidden", whiteSpace: "nowrap",
+                            textOverflow: "ellipsis", letterSpacing: "-0.005em",
+                          }}>
                             {TIPO_LABEL[tarea.tipo]}
                           </div>
-                          {heightPx > 40 && (
-                            <div style={{ fontSize: "10px", color: c.text, opacity: 0.8, lineHeight: 1.2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                          {heightPx > 42 && (
+                            <div style={{
+                              fontSize: "11px", color: c.text, opacity: 0.78,
+                              lineHeight: 1.3, overflow: "hidden", whiteSpace: "nowrap",
+                              textOverflow: "ellipsis", marginTop: "1px",
+                            }}>
                               {tecNombre}
                             </div>
                           )}
-                          {heightPx > 56 && (
-                            <div style={{ fontSize: "9px", color: c.text, opacity: 0.65, marginTop: "2px" }}>
+                          {heightPx > 60 && (
+                            <div style={{
+                              fontSize: "10px", color: c.text, opacity: 0.62,
+                              marginTop: "3px", fontVariantNumeric: "tabular-nums",
+                              fontWeight: 600,
+                            }}>
                               {inicioStr} – {finStr}
                             </div>
                           )}
@@ -468,15 +544,15 @@ export function CalendarPage({ onSelectTarea }: Props) {
         </div>
       </div>
 
-      {/* ── Leyenda de estados ─────────────────────────────────────────── */}
+      {/* ── Pie ─────────────────────────────────────────────────────────── */}
       {!isLoading && tareasFiltradas.length === 0 && (
-        <p style={{ textAlign: "center", color: "#94a3b8", fontSize: "13px", padding: "20px 0" }}>
+        <p style={{ textAlign: "center", color: C.ink400, fontSize: "13px", padding: "24px 0", fontWeight: 500 }}>
           No hay tareas programadas para esta semana.
         </p>
       )}
       {!isLoading && tareasFiltradas.length > 0 && (
-        <p style={{ fontSize: "11px", color: "#94a3b8", textAlign: "right" }}>
-          {tareasFiltradas.length} tarea{tareasFiltradas.length !== 1 ? "s" : ""} programada{tareasFiltradas.length !== 1 ? "s" : ""} · haz clic para ver detalle
+        <p style={{ fontSize: "11px", color: C.ink500, textAlign: "right", fontWeight: 500, letterSpacing: "0.01em" }}>
+          {tareasFiltradas.length} tarea{tareasFiltradas.length !== 1 ? "s" : ""} programada{tareasFiltradas.length !== 1 ? "s" : ""} · clic para ver detalle
         </p>
       )}
     </div>
@@ -486,7 +562,8 @@ export function CalendarPage({ onSelectTarea }: Props) {
 // ── Estilos ───────────────────────────────────────────────────────────────────
 
 const navBtnStyle: React.CSSProperties = {
-  padding: "5px 12px", borderRadius: "6px", border: "1px solid #e2e8f0",
-  background: "white", color: "#334155", fontSize: "12px",
-  cursor: "pointer", fontWeight: 500,
+  padding: "6px 10px", borderRadius: R.sm, border: `1px solid ${C.border}`,
+  background: C.surface, color: C.ink700, fontSize: "13px",
+  cursor: "pointer", fontWeight: 600, lineHeight: 1,
+  transition: "background 0.12s ease, border-color 0.12s ease",
 };

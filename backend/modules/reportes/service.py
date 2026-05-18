@@ -6,6 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from modules.auth.models import Usuario
+from modules.cliente_historial.enums import TipoEvento
+from modules.cliente_historial.service import registrar_evento
 from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
 from modules.reportes.models import Tarea, TareaEvento, TareaFoto
 from modules.reportes.schemas import AsignarTecnico, TareaCreate, TareaUpdate, TransicionEstado, VincularServicio
@@ -105,8 +107,51 @@ async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Ta
         estado_anterior=None,
         estado_nuevo=estado_inicial,
     ))
+
+    await registrar_evento(
+        db,
+        id_servicio=tarea.id_servicio,
+        tipo_evento=TipoEvento.TAREA_CREADA,
+        titulo=f"Tarea creada · {tarea.tipo.replace('_', ' ').title()}",
+        usuario=usuario,
+        descripcion=tarea.descripcion,
+        datos_extra={"prioridad": tarea.prioridad, "estado": estado_inicial.value},
+        tarea_id=tarea.id,
+    )
+
     await db.commit()
     await db.refresh(tarea)
+
+    # ── Notificaciones push ──────────────────────────────────────────────
+    from modules.reportes import notificaciones
+    tipo_legible = tarea.tipo.replace('_', ' ').title()
+    servicio_str = f"Servicio {tarea.id_servicio}" if tarea.id_servicio else "Nueva instalación"
+
+    # Aviso a todos los supervisores (excepto al creador si él mismo es supervisor)
+    try:
+        await notificaciones.enviar_push_a_supervisores(
+            titulo="Nueva tarea registrada",
+            cuerpo=f"{tipo_legible} · {servicio_str}",
+            db=db,
+            data={"tarea_id": tarea.id},
+            excluir_usuario_id=usuario.get("id"),
+        )
+    except Exception:
+        pass
+
+    # Si la tarea se creó ya con un técnico asignado, también le avisamos a él
+    if datos.tecnico_id is not None:
+        try:
+            await notificaciones.enviar_push(
+                usuario_id=datos.tecnico_id,
+                titulo="Nueva tarea asignada",
+                cuerpo=f"{tipo_legible} · {servicio_str}",
+                db=db,
+                data={"tarea_id": tarea.id},
+            )
+        except Exception:
+            pass
+
     return tarea
 
 
@@ -119,6 +164,17 @@ async def vincular_servicio(tarea_id: int, datos: VincularServicio, usuario: dic
     if tarea.datos_instalacion:
         tarea.datos_instalacion = {**tarea.datos_instalacion, "wisphub_sync": "vinculado"}
     tarea.updated_at = datetime.now()
+
+    await registrar_evento(
+        db,
+        id_servicio=tarea.id_servicio,
+        tipo_evento=TipoEvento.TAREA_CREADA,
+        titulo="Instalación vinculada a servicio",
+        usuario=usuario,
+        descripcion=tarea.descripcion,
+        tarea_id=tarea.id,
+    )
+
     await db.commit()
     await db.refresh(tarea)
     return tarea
@@ -145,6 +201,18 @@ async def asignar_tecnico(tarea_id: int, datos: AsignarTecnico, usuario: dict, d
         estado_nuevo=EstadoTarea(tarea.estado),
         comentario=f"Técnico asignado: {tecnico.nombre}",
     ))
+
+    await registrar_evento(
+        db,
+        id_servicio=tarea.id_servicio,
+        tipo_evento=TipoEvento.TAREA_ASIGNADA,
+        titulo=f"Tarea asignada a {tecnico.nombre}",
+        usuario=usuario,
+        descripcion=f"{tarea.tipo.replace('_', ' ').title()} · {tarea.descripcion}",
+        datos_extra={"tecnico_id": tecnico.id, "tecnico_nombre": tecnico.nombre},
+        tarea_id=tarea.id,
+    )
+
     await db.commit()
     await db.refresh(tarea)
 
@@ -199,6 +267,28 @@ async def transicionar_estado(tarea_id: int, datos: TransicionEstado, usuario: d
         lat_evento=datos.lat_evento,
         lng_evento=datos.lng_evento,
     ))
+
+    if estado_nuevo == EstadoTarea.COMPLETADO:
+        tipo_evt = TipoEvento.TAREA_COMPLETADA
+        titulo = f"Tarea completada · {tarea.tipo.replace('_', ' ').title()}"
+    elif estado_nuevo == EstadoTarea.CANCELADO:
+        tipo_evt = TipoEvento.TAREA_CANCELADA
+        titulo = f"Tarea cancelada · {tarea.tipo.replace('_', ' ').title()}"
+    else:
+        tipo_evt = TipoEvento.TAREA_TRANSICION
+        titulo = f"{estado_actual.value.replace('_', ' ').title()} → {estado_nuevo.value.replace('_', ' ').title()}"
+
+    await registrar_evento(
+        db,
+        id_servicio=tarea.id_servicio,
+        tipo_evento=tipo_evt,
+        titulo=titulo,
+        usuario=usuario,
+        descripcion=datos.comentario,
+        datos_extra={"estado_anterior": estado_actual.value, "estado_nuevo": estado_nuevo.value},
+        tarea_id=tarea.id,
+    )
+
     await db.commit()
     await db.refresh(tarea)
 
@@ -235,6 +325,10 @@ def _es_supervisor(usuario: dict) -> bool:
     return usuario.get("rol") in ("administrador", "supervisor") or usuario.get("es_admin", False)
 
 
+def _es_ventas(usuario: dict) -> bool:
+    return usuario.get("rol") == "ventas"
+
+
 async def listar_tareas(
     usuario: dict,
     db: AsyncSession,
@@ -247,7 +341,10 @@ async def listar_tareas(
 ) -> list[Tarea]:
     query = select(Tarea).order_by(Tarea.fecha_creada.desc())
 
-    if not _es_supervisor(usuario):
+    if _es_ventas(usuario):
+        # Ventas ve todas las instalaciones del sistema, nada más.
+        query = query.where(Tarea.tipo == TipoTarea.INSTALACION)
+    elif not _es_supervisor(usuario):
         query = query.where(Tarea.tecnico_id == usuario["id"])
         query = query.where(Tarea.estado != EstadoTarea.PENDIENTE)
     elif tecnico_id == -1:
@@ -277,7 +374,10 @@ async def listar_tareas(
 async def obtener_tarea(tarea_id: int, usuario: dict, db: AsyncSession) -> Tarea:
     tarea = await _obtener_tarea_o_404(tarea_id, db)
 
-    if not _es_supervisor(usuario):
+    if _es_ventas(usuario):
+        if tarea.tipo != TipoTarea.INSTALACION:
+            raise PermissionError("No tienes permiso para ver esta tarea")
+    elif not _es_supervisor(usuario):
         if tarea.tecnico_id != usuario["id"]:
             raise PermissionError("No tienes permiso para ver esta tarea")
         if tarea.estado == EstadoTarea.PENDIENTE:

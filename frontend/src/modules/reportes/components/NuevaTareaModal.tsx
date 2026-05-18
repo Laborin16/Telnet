@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "../../../core/api/apiClient";
+import { useAuth } from "../../auth/hooks/useAuth";
 import { useAllClients } from "../../clients/hooks/useAllClients";
 import { useCrearTarea } from "../hooks/useTareaActions";
 import { fetchPlanes, fetchRouters, fetchIpsDisponibles } from "../api/reportes.api";
@@ -30,7 +31,10 @@ interface UsuarioItem { id: number; nombre: string; username: string; activo: bo
 interface Props { onClose: () => void }
 
 export function NuevaTareaModal({ onClose }: Props) {
-  const [esInstalacion, setEsInstalacion] = useState(false);
+  const { user } = useAuth();
+  const esVentas = user?.rol === "ventas";
+  // Ventas solo puede crear instalaciones — forzamos esa rama del formulario.
+  const [esInstalacion, setEsInstalacion] = useState(esVentas);
 
   return (
     <div
@@ -67,35 +71,37 @@ export function NuevaTareaModal({ onClose }: Props) {
           </button>
         </div>
 
-        {/* Selector de tipo principal */}
-        <div style={{ display: "flex", padding: "16px 24px 0", gap: "10px" }}>
-          <button
-            type="button"
-            onClick={() => setEsInstalacion(false)}
-            style={{
-              flex: 1, padding: "10px", borderRadius: "9px", fontSize: "13px",
-              fontWeight: 600, cursor: "pointer",
-              border: `2px solid ${!esInstalacion ? "#2563eb" : "#e2e8f0"}`,
-              background: !esInstalacion ? "#eff6ff" : "white",
-              color: !esInstalacion ? "#2563eb" : "#64748b",
-            }}
-          >
-            🔧 Tarea de servicio
-          </button>
-          <button
-            type="button"
-            onClick={() => setEsInstalacion(true)}
-            style={{
-              flex: 1, padding: "10px", borderRadius: "9px", fontSize: "13px",
-              fontWeight: 600, cursor: "pointer",
-              border: `2px solid ${esInstalacion ? "#16a34a" : "#e2e8f0"}`,
-              background: esInstalacion ? "#f0fdf4" : "white",
-              color: esInstalacion ? "#16a34a" : "#64748b",
-            }}
-          >
-            🏠 Nueva instalación
-          </button>
-        </div>
+        {/* Selector de tipo principal — oculto para ventas (solo instalaciones) */}
+        {!esVentas && (
+          <div style={{ display: "flex", padding: "16px 24px 0", gap: "10px" }}>
+            <button
+              type="button"
+              onClick={() => setEsInstalacion(false)}
+              style={{
+                flex: 1, padding: "10px", borderRadius: "9px", fontSize: "13px",
+                fontWeight: 600, cursor: "pointer",
+                border: `2px solid ${!esInstalacion ? "#2563eb" : "#e2e8f0"}`,
+                background: !esInstalacion ? "#eff6ff" : "white",
+                color: !esInstalacion ? "#2563eb" : "#64748b",
+              }}
+            >
+              🔧 Tarea de servicio
+            </button>
+            <button
+              type="button"
+              onClick={() => setEsInstalacion(true)}
+              style={{
+                flex: 1, padding: "10px", borderRadius: "9px", fontSize: "13px",
+                fontWeight: 600, cursor: "pointer",
+                border: `2px solid ${esInstalacion ? "#16a34a" : "#e2e8f0"}`,
+                background: esInstalacion ? "#f0fdf4" : "white",
+                color: esInstalacion ? "#16a34a" : "#64748b",
+              }}
+            >
+              🏠 Nueva instalación
+            </button>
+          </div>
+        )}
 
         {esInstalacion
           ? <FormInstalacion onClose={onClose} />

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import type { ClientDetail } from "../../../core/types/client";
 import { ClientStatusBadge } from "./ClientStatusBadge";
 import { AlertaCorteCell } from "./AlertaCorteCell";
+import { ClienteHistorialModal } from "./ClienteHistorialModal";
 import { useClientActions } from "../hooks/useClientActions";
 
 interface Props {
@@ -11,6 +13,7 @@ interface Props {
 
 export function ClientDetailModal({ detail, isLoading, onClose }: Props) {
   const { suspend, activate } = useClientActions();
+  const [historialAbierto, setHistorialAbierto] = useState(false);
 
   const handleSuspend = () => {
     if (!detail) return;
@@ -43,25 +46,34 @@ export function ClientDetailModal({ detail, isLoading, onClose }: Props) {
         {detail && (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
-            {detail.estado === "Activo" && (
-              <button
-                onClick={handleSuspend}
-                disabled={isBusy}
-                style={actionBtn("#dc2626", isBusy)}
-              >
-                {suspend.isPending ? "Suspendiendo..." : "⏸ Suspender Servicio"}
-              </button>
-            )}
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {detail.estado === "Activo" && (
+                <button
+                  onClick={handleSuspend}
+                  disabled={isBusy}
+                  style={{ ...actionBtn("#dc2626", isBusy), flex: 1, minWidth: 0 }}
+                >
+                  {suspend.isPending ? "Suspendiendo..." : "⏸ Suspender Servicio"}
+                </button>
+              )}
 
-            {detail.estado === "Suspendido" && (
+              {detail.estado === "Suspendido" && (
+                <button
+                  onClick={handleActivate}
+                  disabled={isBusy}
+                  style={{ ...actionBtn("#16a34a", isBusy), flex: 1, minWidth: 0 }}
+                >
+                  {activate.isPending ? "Activando..." : "▶ Activar Servicio"}
+                </button>
+              )}
+
               <button
-                onClick={handleActivate}
-                disabled={isBusy}
-                style={actionBtn("#16a34a", isBusy)}
+                onClick={() => setHistorialAbierto(true)}
+                style={historialBtn}
               >
-                {activate.isPending ? "Activando..." : "▶ Activar Servicio"}
+                🕓 Ver historial
               </button>
-            )}
+            </div>
 
             <div style={section}>
               <p style={sectionTitle}>Información General</p>
@@ -105,6 +117,14 @@ export function ClientDetailModal({ detail, isLoading, onClose }: Props) {
           </div>
         )}
       </div>
+
+      {detail && historialAbierto && (
+        <ClienteHistorialModal
+          idServicio={detail.id_servicio}
+          nombreCliente={detail.usuario_rb}
+          onClose={() => setHistorialAbierto(false)}
+        />
+      )}
     </div>
   );
 }
@@ -138,6 +158,18 @@ function actionBtn(color: string, disabled: boolean): React.CSSProperties {
     width: "100%",
   };
 }
+
+const historialBtn: React.CSSProperties = {
+  padding: "10px 16px",
+  borderRadius: "8px",
+  border: "1px solid #cbd5e1",
+  background: "white",
+  color: "#334155",
+  fontSize: "14px",
+  fontWeight: 600,
+  cursor: "pointer",
+  flexShrink: 0,
+};
 
 const overlay: React.CSSProperties = {
   position: "fixed", inset: 0,

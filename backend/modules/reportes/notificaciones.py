@@ -87,3 +87,34 @@ async def enviar_push(
         await db.commit()
 
 
+async def enviar_push_a_supervisores(
+    titulo: str,
+    cuerpo: str,
+    db: AsyncSession,
+    data: dict[str, Any] | None = None,
+    excluir_usuario_id: int | None = None,
+) -> None:
+    """Envía la misma notificación a todos los usuarios activos con rol supervisor.
+
+    Opcionalmente excluye un usuario (típicamente quien generó la acción, para
+    evitar que el supervisor que creó la tarea se notifique a sí mismo).
+    """
+    from modules.auth.models import RolUsuario, Usuario
+
+    stmt = select(Usuario).where(
+        Usuario.rol == RolUsuario.SUPERVISOR,
+        Usuario.activo.is_(True),
+    )
+    if excluir_usuario_id is not None:
+        stmt = stmt.where(Usuario.id != excluir_usuario_id)
+
+    resultado = await db.execute(stmt)
+    supervisores = list(resultado.scalars().all())
+
+    for sup in supervisores:
+        try:
+            await enviar_push(sup.id, titulo, cuerpo, db, data)
+        except Exception as e:
+            logger.warning("Push a supervisor %s falló: %s", sup.id, e)
+
+

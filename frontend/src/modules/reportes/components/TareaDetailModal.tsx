@@ -73,6 +73,7 @@ interface Props {
 export function TareaDetailModal({ tareaId, onClose }: Props) {
   const { user } = useAuth();
   const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
+  const esVentas = user?.rol === "ventas";
   const { data: tarea, isLoading } = useTarea(tareaId);
   const { data: transiciones = [] } = useTareaTransiciones(tareaId);
   const { data: eventos = [] } = useTareaEventos(tareaId);
@@ -456,8 +457,8 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
               )}
 
 
-              {/* Transiciones */}
-              {transiciones.length > 0 && (
+              {/* Transiciones — ventas no puede cambiar estado */}
+              {!esVentas && transiciones.length > 0 && (
                 <section>
                   <p style={{ margin: "0 0 8px", fontSize: "10px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
                     Cambiar estado
@@ -687,25 +688,27 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                   <p style={{ margin: 0, fontSize: "10px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
                     Fotos ({fotos.length})
                   </p>
-                  <label style={{
-                    padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: 600,
-                    border: "1px solid #e2e8f0", background: "white", color: "#475569",
-                    cursor: subiendoFoto ? "not-allowed" : "pointer",
-                    opacity: subiendoFoto ? 0.6 : 1,
-                  }}>
-                    {subiendoFoto ? "Subiendo..." : "+ Foto"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      style={{ display: "none" }}
-                      disabled={subiendoFoto}
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) subir(file);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
+                  {!esVentas && (
+                    <label style={{
+                      padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: 600,
+                      border: "1px solid #e2e8f0", background: "white", color: "#475569",
+                      cursor: subiendoFoto ? "not-allowed" : "pointer",
+                      opacity: subiendoFoto ? 0.6 : 1,
+                    }}>
+                      {subiendoFoto ? "Subiendo..." : "+ Foto"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        disabled={subiendoFoto}
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) subir(file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
 
                 {fotos.length === 0 ? (

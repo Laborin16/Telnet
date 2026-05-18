@@ -11,12 +11,14 @@ from modules.finanzas.router import router as finanzas_router
 from modules.auditlog.router import router as audit_router
 from modules.auth.router import router as auth_router
 from modules.reportes.routes import router as reportes_router
+from modules.cliente_historial.router import router as cliente_historial_router
 from db.session import engine
 from db.base import Base
-import modules.finanzas.models   # noqa: F401
-import modules.auditlog.models   # noqa: F401
-import modules.auth.models       # noqa: F401 — registers Usuario with Base
-import modules.reportes.models   # noqa: F401
+import modules.finanzas.models           # noqa: F401
+import modules.auditlog.models           # noqa: F401
+import modules.auth.models               # noqa: F401 — registers Usuario with Base
+import modules.reportes.models           # noqa: F401
+import modules.cliente_historial.models  # noqa: F401
 
 scheduler = AsyncIOScheduler(timezone="America/Hermosillo")
 
@@ -53,6 +55,7 @@ app.include_router(finanzas_router, prefix="/api/v1/finanzas", tags=["finanzas"]
 app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"])
 app.include_router(auth_router,     prefix="/api/v1/auth",     tags=["auth"])
 app.include_router(reportes_router, prefix="/api/v1/reportes", tags=["reportes"])
+app.include_router(cliente_historial_router, prefix="/api/v1/clients", tags=["cliente_historial"])
 
 
 @app.get("/api/v1/health")

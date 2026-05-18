@@ -6,7 +6,10 @@ from io import BytesIO
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
 from core.dependencies import get_usuario
+from core.wisphub.client import wisphub_client
 from modules.auditlog.service import log_accion
+from modules.cliente_historial.enums import TipoEvento
+from modules.cliente_historial.service import registrar_evento
 from modules.finanzas.service import (
     get_cobros_semana, get_cobros_dia, toggle_verificacion,
     get_log_cobranza, registrar_pago, get_pagos_dia,
@@ -137,6 +140,27 @@ async def verificar_pago(
         descripcion=f"Pago de factura #{id_factura} marcado como {'verificado' if verificado else 'no verificado'}",
         datos_extra={"id_factura": id_factura, "verificado": verificado, "notas": notas},
     )
+
+    # Resolver id_servicio desde la factura para anclar el evento al cliente
+    id_servicio: int | None = None
+    try:
+        factura = await wisphub_client.get(f"/api/facturas/{id_factura}/")
+        sid = factura.get("id_servicio")
+        if sid is not None:
+            id_servicio = int(sid)
+    except Exception:
+        pass
+    if id_servicio is not None:
+        await registrar_evento(
+            db,
+            id_servicio=id_servicio,
+            tipo_evento=TipoEvento.PAGO_VERIFICADO,
+            titulo=f"Pago de factura #{id_factura} {'verificado' if verificado else 'desmarcado'}",
+            usuario=usuario,
+            descripcion=notas,
+            datos_extra={"id_factura": id_factura, "verificado": verificado},
+        )
+        await db.commit()
     return result
 
 
@@ -166,6 +190,27 @@ async def crear_pago(
             "metodo_pago": data.get("metodo_pago"),
         },
     )
+
+    try:
+        id_servicio = int(data.get("id_cliente"))
+    except (TypeError, ValueError):
+        id_servicio = None
+    if id_servicio is not None:
+        await registrar_evento(
+            db,
+            id_servicio=id_servicio,
+            tipo_evento=TipoEvento.PAGO_REGISTRADO,
+            titulo=f"Pago registrado · ${data.get('monto', 0)}",
+            usuario=usuario,
+            descripcion=data.get("notas"),
+            datos_extra={
+                "monto": data.get("monto"),
+                "metodo_pago": data.get("metodo_pago"),
+                "id_factura": data.get("id_factura"),
+            },
+            pago_id=result.get("id"),
+        )
+        await db.commit()
     return result
 
 
@@ -202,6 +247,26 @@ async def registrar_pago_wisphub(
             "id_servicio": data.get("id_servicio"),
         },
     )
+
+    try:
+        id_servicio = int(data.get("id_servicio"))
+    except (TypeError, ValueError):
+        id_servicio = None
+    if id_servicio is not None:
+        await registrar_evento(
+            db,
+            id_servicio=id_servicio,
+            tipo_evento=TipoEvento.PAGO_REGISTRADO,
+            titulo=f"Pago en WispHub · ${data.get('monto', 0)} · Factura #{id_factura}",
+            usuario=usuario,
+            datos_extra={
+                "monto": data.get("monto"),
+                "forma_pago": data.get("forma_pago"),
+                "id_factura": id_factura,
+            },
+            pago_id=result.get("pago_id") if isinstance(result, dict) else None,
+        )
+        await db.commit()
     return result
 
 
