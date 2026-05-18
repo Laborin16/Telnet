@@ -158,8 +158,8 @@ async def ejecutar(
     usuario: dict = Depends(get_usuario),
 ):
     try:
-        facturas_data = await wisphub_client.get("/api/facturas/", params={"page_size": 1000})
-        clientes_data = await wisphub_client.get("/api/clientes/", params={"page_size": 1000})
+        facturas_data = await wisphub_client.get_all("/api/facturas/")
+        clientes_data = await wisphub_client.get_all("/api/clientes/")
         clientes_map = _build_clientes_map(clientes_data)
 
         facturas = []

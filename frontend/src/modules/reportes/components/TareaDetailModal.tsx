@@ -90,7 +90,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
     staleTime: 60_000,
     enabled: puedeGestionar,
   });
-  const tecnicosActivos = usuarios.filter(u => u.activo && u.rol === "tecnico");
+  const tecnicosActivos = usuarios.filter(u => u.activo && (u.rol === "tecnico" || u.rol === "supervisor"));
 
   const apiBase = (import.meta.env.VITE_API_URL as string) ?? "";
 

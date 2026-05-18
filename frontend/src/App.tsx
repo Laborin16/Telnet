@@ -32,7 +32,7 @@ const NAV_ITEMS: { key: Tab; label: string; icon: ReactNode; roles: RolUsuario[]
   { key: "finanzas",  label: "Finanzas",  icon: <Banknote size={16} />,        roles: ["administrador", "cobranza"] },
   { key: "auditoria", label: "Auditoría", icon: <ClipboardList size={16} />,   roles: ["administrador"] },
   { key: "tareas",      label: "Tareas",      icon: <Wrench size={16} />,        roles: ["administrador", "supervisor", "tecnico", "ventas"] },
-  { key: "calendario",  label: "Calendario",  icon: <CalendarDays size={16} />, roles: ["administrador", "tecnico"] },
+  { key: "calendario",  label: "Calendario",  icon: <CalendarDays size={16} />, roles: ["administrador"] },
   { key: "usuarios",    label: "Usuarios",    icon: <KeyRound size={16} />,     roles: ["administrador"] },
 ];
 

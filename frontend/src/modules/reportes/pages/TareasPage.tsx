@@ -171,7 +171,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
   const tecnicosActivos = useMemo(() => {
     // Admin/supervisor: lista completa desde la API.
     // Tecnico: solo su propio usuario (para que el dashboard "Por técnico" muestre su fila).
-    if (puedeGestionar) return usuarios.filter(u => u.activo && u.rol === "tecnico");
+    if (puedeGestionar) return usuarios.filter(u => u.activo && (u.rol === "tecnico" || u.rol === "supervisor"));
     if (user?.rol === "tecnico") {
       return [{
         id: user.id,

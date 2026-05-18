@@ -120,7 +120,7 @@ function FormTareaServicio({ onClose }: { onClose: () => void }) {
     queryFn: async () => (await apiClient.get("/api/v1/auth/usuarios")).data,
     staleTime: 60_000,
   });
-  const tecnicosActivos = usuarios.filter(u => u.activo && u.rol === "tecnico");
+  const tecnicosActivos = usuarios.filter(u => u.activo && (u.rol === "tecnico" || u.rol === "supervisor"));
 
   const [tipo, setTipo]                     = useState<TipoTarea>("SERVICIO");
   const [prioridad, setPrioridad]           = useState<PrioridadTarea>("MEDIA");
@@ -234,7 +234,7 @@ function FormInstalacion({ onClose }: { onClose: () => void }) {
     queryFn: async () => (await apiClient.get("/api/v1/auth/usuarios")).data,
     staleTime: 60_000,
   });
-  const tecnicosActivos = usuarios.filter(u => u.activo && u.rol === "tecnico");
+  const tecnicosActivos = usuarios.filter(u => u.activo && (u.rol === "tecnico" || u.rol === "supervisor"));
 
   const [prioridad, setPrioridad]   = useState<PrioridadTarea>("MEDIA");
   const [tecnicoId, setTecnicoId]   = useState("");

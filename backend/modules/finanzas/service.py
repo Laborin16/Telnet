@@ -35,7 +35,7 @@ async def get_cobros_semana(fecha_inicio: str | None = None) -> dict:
     start_str = start.isoformat()
     end_str = end.isoformat()
 
-    facturas = await wisphub_client.get_all("/api/facturas/")
+    facturas = (await wisphub_client.get_all("/api/facturas/")).get("results", [])
 
     items = []
     total_monto = 0.0
@@ -110,7 +110,7 @@ async def get_cobros_dia(fecha: str | None = None, fecha_fin: str | None = None,
     fecha_str = fecha or date.today().isoformat()
     fecha_fin_str = fecha_fin or fecha_str
 
-    facturas = await wisphub_client.get_all("/api/facturas/")
+    facturas = (await wisphub_client.get_all("/api/facturas/")).get("results", [])
 
     verificaciones: dict[int, bool] = {}
     if db is not None:
