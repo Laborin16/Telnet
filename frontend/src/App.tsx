@@ -25,7 +25,6 @@ import apiClient from "./core/api/apiClient";
 type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "calendario" | "usuarios";
 type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza" | "ventas";
 const PAGE_SIZE = 25;
-const ALERTA_ORDER: Record<string, number> = { critico: 0, pendiente: 1, suspendido: 2, normal: 3 };
 
 const NAV_ITEMS: { key: Tab; label: string; icon: ReactNode; roles: RolUsuario[] }[] = [
   { key: "clientes",  label: "Clientes",  icon: <Users size={16} />,           roles: ["administrador", "supervisor", "cobranza"] },
