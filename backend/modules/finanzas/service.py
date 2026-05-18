@@ -510,15 +510,16 @@ async def get_formas_pago() -> list:
     return [{"id": f["id"], "nombre": f["nombre"]} for f in data.get("results", [])]
 
 
-async def get_tecnicos() -> list:
-    data = await wisphub_client.get("/api/staff/", params={"page_size": 100})
-    return [
-        {
-            "id": s["id"],
-            "nombre": s.get("nombre") or s.get("username", ""),
-        }
-        for s in data.get("results", [])
-    ]
+async def get_tecnicos(db: AsyncSession) -> list:
+    from sqlalchemy import select
+    from modules.auth.models import RolUsuario, Usuario
+
+    result = await db.execute(
+        select(Usuario.id, Usuario.nombre)
+        .where(Usuario.activo.is_(True), Usuario.rol == RolUsuario.TECNICO)
+        .order_by(Usuario.nombre)
+    )
+    return [{"id": uid, "nombre": nombre} for uid, nombre in result.all()]
 
 
 async def get_recoleccion(db: AsyncSession) -> dict:

@@ -65,8 +65,8 @@ async def formas_pago():
 
 
 @router.get("/tecnicos")
-async def tecnicos():
-    return await get_tecnicos()
+async def tecnicos(db: AsyncSession = Depends(get_db)):
+    return await get_tecnicos(db)
 
 
 @router.get("/recoleccion")
@@ -384,25 +384,10 @@ async def _sincronizar_tarea_recoleccion(
     - Si ya hay una y el técnico cambió → la reasigna.
     """
     from sqlalchemy import select
-    from modules.auth.models import Usuario
     from modules.reportes import service as reportes_service
     from modules.reportes.enums import EstadoTarea, PrioridadTarea, TipoTarea
     from modules.reportes.models import Tarea
     from modules.reportes.schemas import AsignarTecnico, TareaCreate
-
-    # El "id_tecnico" que llega desde el frontend de recolección es el id de
-    # WispHub (el catálogo de técnicos de WispHub). La tabla `tareas` apunta a
-    # usuarios locales, así que mapeamos vía Usuario.wisphub_id.
-    res_user = await db.execute(
-        select(Usuario.id).where(Usuario.wisphub_id == tecnico_id, Usuario.activo.is_(True))
-    )
-    tecnico_local_id = res_user.scalar_one_or_none()
-    if tecnico_local_id is None:
-        print(
-            f"[recoleccion → tarea] técnico WispHub id={tecnico_id} no tiene usuario local "
-            "vinculado (Usuario.wisphub_id). No se crea/reasigna tarea."
-        )
-        return
 
     ESTADOS_TERMINALES = (EstadoTarea.COMPLETADO, EstadoTarea.CANCELADO)
 
@@ -423,13 +408,13 @@ async def _sincronizar_tarea_recoleccion(
             tipo=TipoTarea.RECOLECCION,
             prioridad=PrioridadTarea.MEDIA,
             descripcion=(notas or "Recolección de equipo programada desde finanzas.").strip(),
-            tecnico_id=tecnico_local_id,
+            tecnico_id=tecnico_id,
         )
         await reportes_service.crear_tarea(datos, usuario, db)
-    elif tarea_existente.tecnico_id != tecnico_local_id:
+    elif tarea_existente.tecnico_id != tecnico_id:
         await reportes_service.asignar_tecnico(
             tarea_existente.id,
-            AsignarTecnico(tecnico_id=tecnico_local_id),
+            AsignarTecnico(tecnico_id=tecnico_id),
             usuario,
             db,
         )

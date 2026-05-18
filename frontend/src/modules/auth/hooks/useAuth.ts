@@ -4,7 +4,6 @@ export type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza"
 
 export interface AuthUser {
   id: number;
-  wisphub_id: number | null;
   username: string;
   nombre: string;
   rol: RolUsuario;
@@ -19,7 +18,6 @@ function decodeToken(token: string): (AuthUser & { exp: number }) | null {
     const payload = JSON.parse(atob(token.split(".")[1]));
     return {
       id: Number(payload.sub),
-      wisphub_id: payload.wisphub_id ?? null,
       username: payload.username ?? "",
       nombre: payload.nombre ?? "",
       rol: (payload.rol ?? (payload.es_admin ? "administrador" : "tecnico")) as RolUsuario,

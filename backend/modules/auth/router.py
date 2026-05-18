@@ -53,7 +53,6 @@ async def auth_me(authorization: Optional[str] = Header(None)):
         payload = decode_token(authorization[7:])
         return {
             "id": int(payload["sub"]),
-            "wisphub_id": payload.get("wisphub_id"),
             "username": payload.get("username"),
             "nombre": payload.get("nombre"),
             "rol": payload.get("rol", "tecnico"),

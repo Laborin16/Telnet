@@ -38,7 +38,6 @@ def create_token(user: Usuario) -> str:
         "sub": str(user.id),
         "nombre": user.nombre,
         "username": user.username,
-        "wisphub_id": user.wisphub_id,
         "rol": user.rol.value,
         "es_admin": user.rol == RolUsuario.ADMINISTRADOR,  # compat con código existente
         "debe_cambiar_password": user.debe_cambiar_password,
