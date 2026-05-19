@@ -27,12 +27,20 @@ class CrearUsuarioRequest(BaseModel):
     username: str
     nombre: str
     rol: str = "tecnico"
+    sueldo_semanal: float | None = None
+    area: str | None = None
+    en_nomina: bool = False
+    monto_bono: float | None = None
 
 
 class ActualizarUsuarioRequest(BaseModel):
     activo: bool | None = None
     rol: str | None = None
     nombre: str | None = None
+    sueldo_semanal: float | None = None
+    area: str | None = None
+    en_nomina: bool | None = None
+    monto_bono: float | None = None
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -91,12 +99,13 @@ async def auth_usuarios(
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
-    # Lectura permitida a admin y supervisor (supervisor necesita la lista de técnicos
-    # para asignar tareas). Las mutaciones siguen siendo solo admin.
+    # Lectura permitida a admin/supervisor/ventas porque necesitan la lista
+    # de técnicos para asignar tareas (aunque el tab "Usuarios" solo lo vea
+    # admin). Las mutaciones siguen siendo solo admin.
     if usuario.get("id") is None:
         raise HTTPException(status_code=401, detail="Autenticación requerida.")
     rol = usuario.get("rol")
-    if rol not in ("administrador", "supervisor") and not usuario.get("es_admin", False):
+    if rol not in ("administrador", "supervisor", "ventas") and not usuario.get("es_admin", False):
         raise HTTPException(status_code=403, detail="Sin permisos para listar usuarios.")
     return await get_usuarios(db)
 
@@ -116,7 +125,11 @@ async def auth_crear_usuario(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido.")
     try:
-        return await crear_usuario(body.username, body.nombre, body.rol, db)
+        return await crear_usuario(
+            body.username, body.nombre, body.rol, db,
+            sueldo_semanal=body.sueldo_semanal, area=body.area, en_nomina=body.en_nomina,
+            monto_bono=body.monto_bono,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -137,7 +150,11 @@ async def auth_actualizar_usuario(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido.")
     try:
-        return await actualizar_usuario(user_id, body.activo, body.rol, body.nombre, db)
+        return await actualizar_usuario(
+            user_id, body.activo, body.rol, body.nombre, db,
+            sueldo_semanal=body.sueldo_semanal, area=body.area, en_nomina=body.en_nomina,
+            monto_bono=body.monto_bono,
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

@@ -100,6 +100,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
   const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
   const esAdmin = user?.rol === "administrador";
   const esVentas = user?.rol === "ventas";
+  const puedeEditarTareas = puedeGestionar || esVentas;
   const { mutate: eliminarTareaMut } = useEliminarTarea();
   const [subTab, setSubTab]                     = useState<"lista" | "dashboard" | "recoleccion">("lista");
   const [estadoFiltro, setEstadoFiltro]         = useState<EstadoTarea | "">("");
@@ -166,12 +167,12 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
     queryKey: ["usuarios-lista"],
     queryFn: async () => (await apiClient.get("/api/v1/auth/usuarios")).data,
     staleTime: 60_000,
-    enabled: puedeGestionar,
+    enabled: puedeEditarTareas,
   });
   const tecnicosActivos = useMemo(() => {
-    // Admin/supervisor: lista completa desde la API.
+    // Admin/supervisor/ventas: lista completa desde la API.
     // Tecnico: solo su propio usuario (para que el dashboard "Por técnico" muestre su fila).
-    if (puedeGestionar) return usuarios.filter(u => u.activo && (u.rol === "tecnico" || u.rol === "supervisor"));
+    if (puedeEditarTareas) return usuarios.filter(u => u.activo && (u.rol === "tecnico" || u.rol === "supervisor"));
     if (user?.rol === "tecnico") {
       return [{
         id: user.id,
@@ -182,7 +183,7 @@ export function TareasPage({ onSelectTarea, onNuevaTarea }: TareasPageProps) {
       } as UsuarioItem];
     }
     return [];
-  }, [usuarios, puedeGestionar, user]);
+  }, [usuarios, puedeEditarTareas, user]);
 
   // Filtrado client-side por estado, prioridad, tipo y búsqueda
   const tareas = (todasLasTareas ?? []).filter(t => {

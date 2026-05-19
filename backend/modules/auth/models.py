@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Integer, String, Boolean, DateTime, Enum
+from sqlalchemy import Integer, String, Boolean, DateTime, Enum, Float
 from sqlalchemy.orm import Mapped, mapped_column
 from db.base import Base
 
@@ -28,6 +28,10 @@ class Usuario(Base):
         nullable=False,
     )
     debe_cambiar_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    sueldo_semanal: Mapped[float | None] = mapped_column(Float, nullable=True)
+    area: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    en_nomina: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    monto_bono: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 

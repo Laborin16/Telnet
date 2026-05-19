@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useRegistrarPagoWispHub, useSubirComprobante } from "../hooks/useCobranza";
+import { useRegistrarPagoWispHub } from "../hooks/useCobranza";
 import type { ClienteAlerta } from "../hooks/useCobranza";
 import { useEnviarWhatsAppIndividual } from "../hooks/useWhatsApp";
+import { useAuth } from "../../auth/hooks/useAuth";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -40,9 +41,12 @@ export function PagoModal({ cliente, onClose }: Props) {
     setCuenta("");
   }
 
+  const { user } = useAuth();
+  const esAdmin = user?.rol === "administrador" || user?.es_admin === true;
+  const comprobanteObligatorio = !esAdmin;
+
   const { mutate: registrar, isPending, isSuccess, error } = useRegistrarPagoWispHub();
   const errorMsg = error ? ((error as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Error al registrar el pago. Intenta de nuevo.") : null;
-  const { mutate: subirComprobante, isPending: subiendo } = useSubirComprobante();
 
   const { mutate: enviarWA, isPending: waPending, isSuccess: waSuccess, error: waError } = useEnviarWhatsAppIndividual();
   const waErrorMsg = waError
@@ -54,6 +58,7 @@ export function PagoModal({ cliente, onClose }: Props) {
   function handleSubmit() {
     const montoNum = parseFloat(monto);
     if (!montoNum || montoNum <= 0) return;
+    if (comprobanteObligatorio && !archivo) return;
     registrar(
       {
         id_factura: cliente.id_factura,
@@ -64,19 +69,10 @@ export function PagoModal({ cliente, onClose }: Props) {
         id_servicio: cliente.id_servicio,
         nombre_cliente: cliente.nombre,
         fecha_pago_real: fechaPagoReal,
+        comprobante: archivo,
       },
       {
-        onSuccess: (data) => {
-          const id = (data as { pago_id?: number }).pago_id ?? null;
-          if (archivo && id) {
-            subirComprobante(
-              { pago_id: id, file: archivo },
-              { onSuccess: () => setTimeout(onClose, 1200) }
-            );
-          } else {
-            setTimeout(onClose, 1500);
-          }
-        },
+        onSuccess: () => setTimeout(onClose, 1500),
       }
     );
   }
@@ -203,8 +199,17 @@ export function PagoModal({ cliente, onClose }: Props) {
           </div>
 
           <div>
-            <label style={labelStyle}>Comprobante de pago <span style={{ fontWeight: 400, color: "#94a3b8" }}>(opcional)</span></label>
-            <label style={fileLabel}>
+            <label style={labelStyle}>
+              Comprobante de pago{" "}
+              <span style={{ fontWeight: 400, color: comprobanteObligatorio ? "#dc2626" : "#94a3b8" }}>
+                {comprobanteObligatorio ? "(obligatorio)" : "(opcional)"}
+              </span>
+            </label>
+            <label style={{
+              ...fileLabel,
+              borderColor: comprobanteObligatorio && !archivo ? "#fca5a5" : "#cbd5e1",
+              backgroundColor: comprobanteObligatorio && !archivo ? "#fef2f2" : "#f8fafc",
+            }}>
               <input
                 type="file"
                 accept="image/*,.pdf"
@@ -216,17 +221,22 @@ export function PagoModal({ cliente, onClose }: Props) {
                 : <span style={{ color: "#94a3b8" }}>Seleccionar imagen o PDF...</span>
               }
             </label>
+            {comprobanteObligatorio && !archivo && (
+              <p style={{ margin: "4px 0 0", fontSize: 11, color: "#dc2626" }}>
+                Solo los administradores pueden registrar pagos sin comprobante.
+              </p>
+            )}
           </div>
         </div>
 
-        {isSuccess && !subiendo && (
+        {isSuccess && (
           <div style={{ marginTop: "16px", padding: "10px 14px", backgroundColor: "#f0fdf4", borderRadius: "8px", color: "#16a34a", fontSize: "13px", fontWeight: 600 }}>
             ✅ Pago registrado correctamente
           </div>
         )}
-        {(isPending || subiendo) && (
+        {isPending && (
           <div style={{ marginTop: "16px", padding: "10px 14px", backgroundColor: "#eff6ff", borderRadius: "8px", color: "#1e40af", fontSize: "13px" }}>
-            {subiendo ? "Subiendo comprobante..." : "Registrando pago..."}
+            Registrando pago…
           </div>
         )}
         {errorMsg && (
@@ -239,10 +249,10 @@ export function PagoModal({ cliente, onClose }: Props) {
           <button onClick={onClose} style={cancelBtn}>Cancelar</button>
           <button
             onClick={handleSubmit}
-            disabled={isPending || subiendo || isSuccess}
-            style={submitBtn(isPending || subiendo || isSuccess)}
+            disabled={isPending || isSuccess || (comprobanteObligatorio && !archivo)}
+            style={submitBtn(isPending || isSuccess || (comprobanteObligatorio && !archivo))}
           >
-            {isPending ? "Registrando..." : subiendo ? "Subiendo..." : "Confirmar Pago"}
+            {isPending ? "Registrando..." : "Confirmar Pago"}
           </button>
         </div>
       </div>

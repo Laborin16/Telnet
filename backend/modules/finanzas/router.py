@@ -1,5 +1,6 @@
+import json
 import os
-from fastapi import APIRouter, Query, Depends, Body, UploadFile, File, HTTPException
+from fastapi import APIRouter, Query, Depends, Body, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import Optional
 from io import BytesIO
@@ -172,6 +173,13 @@ async def crear_pago(
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
+    # Endpoint genérico sin upload de comprobante: solo admin.
+    # No-admin debe usar POST /registrar-pago/{id_factura} con archivo adjunto.
+    if usuario.get("rol") != "administrador" and not usuario.get("es_admin", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Solo administradores pueden registrar pagos sin comprobante por este endpoint.",
+        )
     result = await registrar_pago(data, db)
     await log_accion(
         db, usuario,
@@ -214,20 +222,62 @@ async def crear_pago(
     return result
 
 
+_COMPROBANTE_EXT_PERMITIDAS = {".jpg", ".jpeg", ".png", ".pdf", ".webp"}
+_COMPROBANTE_MAX_BYTES = 10 * 1024 * 1024
+
+
 @router.post("/registrar-pago/{id_factura}")
 async def registrar_pago_wisphub(
     id_factura: int,
-    data: dict = Body(...),
+    data: str = Form(...),
+    comprobante: UploadFile | None = File(None),
     db: AsyncSession = Depends(get_db),
     usuario: dict = Depends(get_usuario),
 ):
+    # Validar payload JSON dentro del multipart
     try:
-        result = await pagar_factura_wisphub(id_factura, data, db)
+        payload = json.loads(data)
+        if not isinstance(payload, dict):
+            raise ValueError("data debe ser un objeto JSON")
+    except (ValueError, json.JSONDecodeError) as e:
+        raise HTTPException(status_code=422, detail=f"data inválida: {e}")
+
+    # Comprobante obligatorio para no-administradores
+    es_admin = usuario.get("rol") == "administrador" or usuario.get("es_admin", False)
+    if comprobante is None and not es_admin:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes adjuntar el comprobante de pago. Solo los administradores pueden registrar pagos sin comprobante.",
+        )
+
+    # Pre-validar el archivo (formato y tamaño) ANTES de tocar WispHub
+    contenido_comprobante: bytes | None = None
+    if comprobante is not None:
+        ext = os.path.splitext(comprobante.filename or "")[1].lower()
+        if ext not in _COMPROBANTE_EXT_PERMITIDAS:
+            raise HTTPException(status_code=400, detail="Formato de comprobante no permitido. Usa JPG, PNG, WEBP o PDF.")
+        contenido_comprobante = await comprobante.read()
+        if len(contenido_comprobante) > _COMPROBANTE_MAX_BYTES:
+            raise HTTPException(status_code=400, detail="El comprobante no puede superar 10 MB.")
+
+    try:
+        result = await pagar_factura_wisphub(id_factura, payload, db)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         print(f"[ERROR registrar-pago #{id_factura}]: {e}")
         raise HTTPException(status_code=500, detail="Error interno al registrar el pago.")
+
+    # Subir comprobante si se adjuntó (mismo flow atómico)
+    pago_id = result.get("pago_id") if isinstance(result, dict) else None
+    if contenido_comprobante is not None and pago_id is not None:
+        try:
+            comprobante_result = await upload_comprobante(pago_id, comprobante.filename or "comprobante", contenido_comprobante, db)
+            if isinstance(result, dict):
+                result["comprobante_url"] = comprobante_result.get("comprobante_url")
+        except ValueError as e:
+            # Pago ya registrado, pero comprobante falló: informar pero no revertir
+            print(f"[WARN comprobante #{pago_id}]: {e}")
 
     await log_accion(
         db, usuario,
@@ -237,19 +287,20 @@ async def registrar_pago_wisphub(
         entidad_id=str(id_factura),
         descripcion=(
             f"Pago registrado en WispHub — Factura #{id_factura} — "
-            f"${data.get('monto', 0)} — Cliente: {data.get('nombre_cliente', '')}"
+            f"${payload.get('monto', 0)} — Cliente: {payload.get('nombre_cliente', '')}"
         ),
         datos_extra={
             "id_factura": id_factura,
-            "monto": data.get("monto"),
-            "forma_pago": data.get("forma_pago"),
-            "nombre_cliente": data.get("nombre_cliente"),
-            "id_servicio": data.get("id_servicio"),
+            "monto": payload.get("monto"),
+            "forma_pago": payload.get("forma_pago"),
+            "nombre_cliente": payload.get("nombre_cliente"),
+            "id_servicio": payload.get("id_servicio"),
+            "comprobante_adjunto": comprobante is not None,
         },
     )
 
     try:
-        id_servicio = int(data.get("id_servicio"))
+        id_servicio = int(payload.get("id_servicio"))
     except (TypeError, ValueError):
         id_servicio = None
     if id_servicio is not None:
@@ -257,11 +308,11 @@ async def registrar_pago_wisphub(
             db,
             id_servicio=id_servicio,
             tipo_evento=TipoEvento.PAGO_REGISTRADO,
-            titulo=f"Pago en WispHub · ${data.get('monto', 0)} · Factura #{id_factura}",
+            titulo=f"Pago en WispHub · ${payload.get('monto', 0)} · Factura #{id_factura}",
             usuario=usuario,
             datos_extra={
-                "monto": data.get("monto"),
-                "forma_pago": data.get("forma_pago"),
+                "monto": payload.get("monto"),
+                "forma_pago": payload.get("forma_pago"),
                 "id_factura": id_factura,
             },
             pago_id=result.get("pago_id") if isinstance(result, dict) else None,

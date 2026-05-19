@@ -74,6 +74,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
   const puedeGestionar = user?.rol === "administrador" || user?.rol === "supervisor";
   const esAdmin = user?.rol === "administrador";
   const esVentas = user?.rol === "ventas";
+  const puedeEditarTareas = puedeGestionar || esVentas;  // asignar/editar/cliente abierto a ventas
   const { data: tarea, isLoading } = useTarea(tareaId);
   const { data: transiciones = [] } = useTareaTransiciones(tareaId);
   const { data: eventos = [] } = useTareaEventos(tareaId);
@@ -88,7 +89,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
     queryKey: ["usuarios-lista"],
     queryFn: async () => (await apiClient.get("/api/v1/auth/usuarios")).data,
     staleTime: 60_000,
-    enabled: puedeGestionar,
+    enabled: puedeEditarTareas,
   });
   const tecnicosActivos = usuarios.filter(u => u.activo && (u.rol === "tecnico" || u.rol === "supervisor"));
 
@@ -337,7 +338,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
               {estadoActual.label}
             </span>
           )}
-          {esAdmin && tarea && !modoEdicion && (
+          {puedeEditarTareas && tarea && !modoEdicion && (
             <button
               onClick={abrirEdicion}
               style={{
@@ -526,7 +527,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                               ? `${fmtDateShort(tarea.fecha_inicio)}${tarea.fecha_fin ? ` → ${fmtDateShort(tarea.fecha_fin)}` : ""}`
                               : "Sin horario asignado"}
                           </p>
-                          {esAdmin && (
+                          {puedeEditarTareas && (
                             <button onClick={abrirEdicionHorario} style={{
                               padding: "2px 8px", borderRadius: "5px", fontSize: "11px",
                               border: "1px solid #e2e8f0", background: "transparent",
@@ -582,7 +583,7 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                             ? (usuarios.find(u => u.id === tarea.tecnico_id)?.nombre ?? `#${tarea.tecnico_id}`)
                             : "Sin asignar"}
                         </p>
-                        {esAdmin && (
+                        {puedeEditarTareas && (
                           <button onClick={() => setModoAsignar(true)} style={{
                             padding: "2px 8px", borderRadius: "5px", fontSize: "11px",
                             border: "1px solid #e2e8f0", background: "transparent",
@@ -602,8 +603,8 @@ export function TareaDetailModal({ tareaId, onClose }: Props) {
                 <PanelInstalacion
                   datos={tarea.datos_instalacion}
                   tareaId={tarea.id}
-                  esAdmin={puedeGestionar}
-                  permiteEditarCliente={puedeGestionar && tarea.estado !== "COMPLETADO" && tarea.estado !== "CANCELADO"}
+                  esAdmin={puedeEditarTareas}
+                  permiteEditarCliente={puedeEditarTareas && tarea.estado !== "COMPLETADO" && tarea.estado !== "CANCELADO"}
                 />
               )}
 

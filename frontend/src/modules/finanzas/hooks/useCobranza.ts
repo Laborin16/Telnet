@@ -193,9 +193,18 @@ export function useHistorialPagos(search: string) {
 
 export function useRegistrarPagoWispHub() {
   const queryClient = useQueryClient();
-  return useMutation<{ messages: string[]; task_id: string }, Error, { id_factura: number } & PagoWispHubInput>({
-    mutationFn: async ({ id_factura, ...data }) => {
-      const res = await apiClient.post(`/api/v1/finanzas/registrar-pago/${id_factura}`, data);
+  return useMutation<
+    { messages?: string[]; task_id?: string; pago_id?: number; comprobante_url?: string },
+    Error,
+    { id_factura: number; comprobante?: File | null } & PagoWispHubInput
+  >({
+    mutationFn: async ({ id_factura, comprobante, ...data }) => {
+      const form = new FormData();
+      form.append("data", JSON.stringify(data));
+      if (comprobante) form.append("comprobante", comprobante);
+      const res = await apiClient.post(`/api/v1/finanzas/registrar-pago/${id_factura}`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       return res.data;
     },
     onSuccess: () => {

@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { useRecoleccion, useObservaciones, type ItemRecoleccion } from "../hooks/useCobranza";
 import { useDebounce } from "../../../shared/hooks/useDebounce";
+import { useAuth } from "../../auth/hooks/useAuth";
 import { ObservacionCell } from "./ObservacionCell";
 import { RecoleccionModal } from "./RecoleccionModal";
+import { PagoModal } from "./PagoModal";
 
 // ── Vista compartida de recolección ──────────────────────────────────────────
 //
@@ -13,9 +15,13 @@ export function RecoleccionTab() {
   const { data: recoleccion, isLoading: recoleccionLoading } = useRecoleccion();
 
   const [itemRecoleccion, setItemRecoleccion]     = useState<ItemRecoleccion | null>(null);
+  const [itemPago, setItemPago]                   = useState<ItemRecoleccion | null>(null);
   const [filtrosRecoleccion, setFiltrosRecoleccion] = useState<Set<string>>(new Set());
   const [searchRecoleccion, setSearchRecoleccion]   = useState("");
   const dSearchRecoleccion = useDebounce(searchRecoleccion, 200);
+
+  const { user } = useAuth();
+  const puedeRegistrarPago = user?.rol === "administrador" || user?.rol === "cobranza" || user?.es_admin === true;
 
   const toggleFiltroRecoleccion = (key: string) => {
     setFiltrosRecoleccion(prev => {
@@ -133,6 +139,7 @@ export function RecoleccionTab() {
                 <th style={th}>Total</th>
                 <th style={th}>Observaciones</th>
                 <th style={th}>Acción</th>
+                {puedeRegistrarPago && <th style={th}>Pago</th>}
               </tr>
             </thead>
             <tbody>
@@ -172,6 +179,21 @@ export function RecoleccionTab() {
                       );
                     })()}
                   </td>
+                  {puedeRegistrarPago && (
+                    <td style={td}>
+                      <button
+                        onClick={() => setItemPago(item)}
+                        style={{
+                          padding: "4px 12px", borderRadius: "6px", border: "none",
+                          backgroundColor: "#16a34a", color: "white",
+                          fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Registrar pago
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -190,6 +212,22 @@ export function RecoleccionTab() {
         <RecoleccionModal
           item={itemRecoleccion}
           onClose={() => setItemRecoleccion(null)}
+        />
+      )}
+
+      {itemPago && (
+        <PagoModal
+          cliente={{
+            id_servicio: itemPago.id_servicio,
+            nombre: itemPago.nombre,
+            telefono: itemPago.telefono,
+            estado: itemPago.estado,
+            fecha_vencimiento: itemPago.fecha_vencimiento,
+            dias_vencido: itemPago.dias_vencido,
+            id_factura: itemPago.id_factura,
+            total: itemPago.total,
+          }}
+          onClose={() => setItemPago(null)}
         />
       )}
     </div>

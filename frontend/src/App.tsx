@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, type ReactNode } from "react";
-import { Users, LayoutDashboard, Banknote, ClipboardList, Wrench, KeyRound, Menu, X, Eye, EyeOff, CalendarDays } from "lucide-react";
+import { Users, LayoutDashboard, Banknote, ClipboardList, Wrench, KeyRound, Menu, X, Eye, EyeOff, CalendarDays, Wallet, Receipt } from "lucide-react";
 import { useAllClients } from "./modules/clients/hooks/useAllClients";
 import { ClientsTable } from "./modules/clients/components/ClientsTable";
 import { useDebounce } from "./shared/hooks/useDebounce";
@@ -14,25 +14,27 @@ import { useObservaciones, useRecoleccion } from "./modules/finanzas/hooks/useCo
 import { useAuth } from "./modules/auth/hooks/useAuth";
 import { TareasPage } from "./modules/reportes/pages/TareasPage";
 import { CalendarPage } from "./modules/reportes/pages/CalendarPage";
+import { NominaPage } from "./modules/nomina/pages/NominaPage";
+import { PagosEmpresaPage } from "./modules/pagos_empresa/pages/PagosEmpresaPage";
 import { TareaDetailModal } from "./modules/reportes/components/TareaDetailModal";
 import { NuevaTareaModal } from "./modules/reportes/components/NuevaTareaModal";
-import { useTareas } from "./modules/reportes/hooks/useTareas";
-import { calcularSLA } from "./modules/reportes/utils/sla";
 import { ToastProvider } from "./shared/components/ToastProvider";
 import { usePushSubscription } from "./modules/reportes/hooks/usePushSubscription";
 import apiClient from "./core/api/apiClient";
 
-type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "calendario" | "usuarios";
+type Tab = "clientes" | "dashboard" | "finanzas" | "auditoria" | "tareas" | "calendario" | "nomina" | "pagos_empresa" | "usuarios";
 type RolUsuario = "administrador" | "supervisor" | "tecnico" | "cobranza" | "ventas";
 const PAGE_SIZE = 25;
 
 const NAV_ITEMS: { key: Tab; label: string; icon: ReactNode; roles: RolUsuario[] }[] = [
   { key: "clientes",  label: "Clientes",  icon: <Users size={16} />,           roles: ["administrador", "supervisor", "cobranza"] },
-  { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} />, roles: ["administrador", "supervisor", "cobranza"] },
+  { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} />, roles: ["administrador"] },
   { key: "finanzas",  label: "Finanzas",  icon: <Banknote size={16} />,        roles: ["administrador", "cobranza"] },
   { key: "auditoria", label: "Auditoría", icon: <ClipboardList size={16} />,   roles: ["administrador"] },
   { key: "tareas",      label: "Tareas",      icon: <Wrench size={16} />,        roles: ["administrador", "supervisor", "tecnico", "ventas"] },
   { key: "calendario",  label: "Calendario",  icon: <CalendarDays size={16} />, roles: ["administrador"] },
+  { key: "nomina",      label: "Nómina",      icon: <Wallet size={16} />,       roles: ["administrador"] },
+  { key: "pagos_empresa", label: "Pagos",     icon: <Receipt size={16} />,      roles: ["administrador"] },
   { key: "usuarios",    label: "Usuarios",    icon: <KeyRound size={16} />,     roles: ["administrador"] },
 ];
 
@@ -66,10 +68,6 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
 
   usePushSubscription();
 
-  const { data: tareasAlerta } = useTareas({});
-  const alertaCount = (tareasAlerta ?? []).filter(t =>
-    t.estado === "BLOQUEADO" || calcularSLA(t.tipo, t.estado, t.fecha_creada).vencida
-  ).length;
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -183,7 +181,6 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           </p>
           {NAV_ITEMS.filter(i => i.roles.includes(userRol)).map(({ key, label, icon }) => {
             const active = tab === key;
-            const badge = key === "tareas" && alertaCount > 0 ? alertaCount : 0;
             return (
               <button key={key} onClick={() => { setTab(key); if (isMobile) setSidebarOpen(false); }} className="sit-nav-item" style={{
                 display: "flex", alignItems: "center", gap: "9px",
@@ -196,17 +193,6 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
               }}>
                 <span style={{ display: "flex", alignItems: "center", lineHeight: 1 }}>{icon}</span>
                 <span style={{ flex: 1 }}>{label}</span>
-                {badge > 0 && (
-                  <span style={{
-                    minWidth: "18px", height: "18px", borderRadius: "9px",
-                    background: "#dc2626", color: "white",
-                    fontSize: "10px", fontWeight: 700, lineHeight: "18px",
-                    textAlign: "center", padding: "0 5px",
-                    flexShrink: 0,
-                  }}>
-                    {badge > 99 ? "99+" : badge}
-                  </span>
-                )}
               </button>
             );
           })}
@@ -319,6 +305,8 @@ function MainApp({ user, logout }: { user: NonNullable<ReturnType<typeof useAuth
           {tab === "calendario" && (
             <CalendarPage onSelectTarea={id => setSelectedTareaId(id)} />
           )}
+          {tab === "nomina" && <NominaPage />}
+          {tab === "pagos_empresa" && <PagosEmpresaPage />}
 
           {tab === "clientes" && (
             <>

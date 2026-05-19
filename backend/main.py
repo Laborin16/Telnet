@@ -12,21 +12,58 @@ from modules.auditlog.router import router as audit_router
 from modules.auth.router import router as auth_router
 from modules.reportes.routes import router as reportes_router
 from modules.cliente_historial.router import router as cliente_historial_router
-from db.session import engine
+from modules.nomina.router import router as nomina_router
+from modules.pagos_empresa.router import router as pagos_empresa_router
+from db.session import engine, AsyncSessionLocal
 from db.base import Base
 import modules.finanzas.models           # noqa: F401
 import modules.auditlog.models           # noqa: F401
 import modules.auth.models               # noqa: F401 — registers Usuario with Base
 import modules.reportes.models           # noqa: F401
 import modules.cliente_historial.models  # noqa: F401
+import modules.nomina.models             # noqa: F401
+import modules.pagos_empresa.models      # noqa: F401
 
 scheduler = AsyncIOScheduler(timezone="America/Hermosillo")
+
+
+async def _cron_nomina_lunes():
+    """Crea el período semanal cada lunes 00:01 zona Hermosillo."""
+    from modules.nomina.service import cron_lunes
+    async with AsyncSessionLocal() as db:
+        try:
+            await cron_lunes(db)
+        except Exception as e:
+            print(f"[cron nomina] error: {e}")
+
+
+async def _cron_pagos_empresa_recordatorios():
+    """Envía push diario a admins 2 días antes del vencimiento de cada pago pendiente."""
+    from modules.pagos_empresa.service import cron_recordatorios_pagos_empresa
+    async with AsyncSessionLocal() as db:
+        try:
+            await cron_recordatorios_pagos_empresa(db)
+        except Exception as e:
+            print(f"[cron pagos_empresa] error: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    from apscheduler.triggers.cron import CronTrigger
+    scheduler.add_job(
+        _cron_nomina_lunes,
+        trigger=CronTrigger(day_of_week="mon", hour=0, minute=1),
+        id="nomina_lunes",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _cron_pagos_empresa_recordatorios,
+        trigger=CronTrigger(hour=8, minute=0),
+        id="pagos_empresa_recordatorios",
+        replace_existing=True,
+    )
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)
@@ -56,6 +93,8 @@ app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"])
 app.include_router(auth_router,     prefix="/api/v1/auth",     tags=["auth"])
 app.include_router(reportes_router, prefix="/api/v1/reportes", tags=["reportes"])
 app.include_router(cliente_historial_router, prefix="/api/v1/clients", tags=["cliente_historial"])
+app.include_router(nomina_router, prefix="/api/v1/nomina", tags=["nomina"])
+app.include_router(pagos_empresa_router, prefix="/api/v1/pagos-empresa", tags=["pagos_empresa"])
 
 
 @app.get("/api/v1/health")

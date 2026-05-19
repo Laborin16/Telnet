@@ -13,6 +13,8 @@ import modules.auth.models        # noqa: F401
 import modules.auditlog.models    # noqa: F401
 import modules.finanzas.models    # noqa: F401
 import modules.reportes.models    # noqa: F401
+import modules.nomina.models      # noqa: F401
+import modules.pagos_empresa.models  # noqa: F401
 
 config = context.config
 

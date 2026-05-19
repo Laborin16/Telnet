@@ -98,7 +98,11 @@ async def cambiar_password(user_id: int, password_actual: str, password_nuevo: s
     return create_token(user)
 
 
-async def crear_usuario(username: str, nombre: str, rol: str, db: AsyncSession) -> dict:
+async def crear_usuario(
+    username: str, nombre: str, rol: str, db: AsyncSession,
+    sueldo_semanal: float | None = None, area: str | None = None, en_nomina: bool = False,
+    monto_bono: float | None = None,
+) -> dict:
     username = username.strip().lower()
     nombre = nombre.strip()
     if not username or not nombre:
@@ -120,13 +124,21 @@ async def crear_usuario(username: str, nombre: str, rol: str, db: AsyncSession) 
         rol=rol_enum,
         activo=True,
         debe_cambiar_password=True,
+        sueldo_semanal=sueldo_semanal,
+        area=(area.strip() if area else None) or None,
+        en_nomina=bool(en_nomina),
+        monto_bono=monto_bono if (monto_bono is not None and monto_bono > 0) else None,
     )
     db.add(user)
     await db.commit()
     return {"username": user.username, "nombre": user.nombre, "password_temporal": temp_pw}
 
 
-async def actualizar_usuario(user_id: int, activo: bool | None, rol: str | None, nombre: str | None, db: AsyncSession) -> dict:
+async def actualizar_usuario(
+    user_id: int, activo: bool | None, rol: str | None, nombre: str | None, db: AsyncSession,
+    sueldo_semanal: float | None = None, area: str | None = None, en_nomina: bool | None = None,
+    monto_bono: float | None = None,
+) -> dict:
     result = await db.execute(select(Usuario).where(Usuario.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -142,6 +154,14 @@ async def actualizar_usuario(user_id: int, activo: bool | None, rol: str | None,
         nombre = nombre.strip()
         if nombre:
             user.nombre = nombre
+    if sueldo_semanal is not None:
+        user.sueldo_semanal = sueldo_semanal if sueldo_semanal > 0 else None
+    if area is not None:
+        user.area = area.strip() or None
+    if en_nomina is not None:
+        user.en_nomina = bool(en_nomina)
+    if monto_bono is not None:
+        user.monto_bono = monto_bono if monto_bono > 0 else None
     user.updated_at = datetime.now()
     await db.commit()
     return _usuario_dict(user)
@@ -185,4 +205,8 @@ def _usuario_dict(u: Usuario) -> dict:
         "rol": u.rol.value,
         "es_admin": u.es_admin,
         "debe_cambiar_password": u.debe_cambiar_password,
+        "sueldo_semanal": u.sueldo_semanal,
+        "area": u.area,
+        "en_nomina": u.en_nomina,
+        "monto_bono": u.monto_bono,
     }

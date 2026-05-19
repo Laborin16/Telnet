@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 from sqlalchemy import select
@@ -17,6 +17,19 @@ MEDIA_DIR = Path("media/fotos")
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 EXTENSIONES_PERMITIDAS = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
+
+
+async def _disparar_bono(db: AsyncSession, tecnico_id: int | None, fecha_ref: date | None) -> None:
+    """Hook hacia el módulo de nómina: recalcula el bono del técnico tras un
+    cambio relevante en una tarea. No bloquea el flow principal si falla."""
+    if tecnico_id is None:
+        return
+    try:
+        from modules.nomina.service import evaluar_bono_tecnico
+        await evaluar_bono_tecnico(db, tecnico_id, fecha_ref)
+    except Exception:
+        # Nómina no debe romper el flujo de tareas
+        pass
 
 
 async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Tarea:
@@ -83,6 +96,9 @@ async def crear_tarea(datos: TareaCreate, usuario: dict, db: AsyncSession) -> Ta
     await db.commit()
     await db.refresh(tarea)
 
+    # Recalcular bono del técnico si la tarea ya nació asignada
+    await _disparar_bono(db, tarea.tecnico_id, tarea.fecha_inicio.date() if tarea.fecha_inicio else None)
+
     # ── Notificaciones push ──────────────────────────────────────────────
     from modules.reportes import notificaciones
     tipo_legible = tarea.tipo.replace('_', ' ').title()
@@ -146,6 +162,7 @@ async def asignar_tecnico(tarea_id: int, datos: AsignarTecnico, usuario: dict, d
     tecnico = await _verificar_tecnico(datos.tecnico_id, db)
 
     estado_anterior = EstadoTarea(tarea.estado)
+    tecnico_id_anterior = tarea.tecnico_id
 
     if tarea.estado == EstadoTarea.PENDIENTE:
         tarea.estado = EstadoTarea.ASIGNADO
@@ -176,6 +193,12 @@ async def asignar_tecnico(tarea_id: int, datos: AsignarTecnico, usuario: dict, d
 
     await db.commit()
     await db.refresh(tarea)
+
+    # Recalcular bono: técnico anterior (perdió tarea) y técnico nuevo
+    fecha_ref = tarea.fecha_inicio.date() if tarea.fecha_inicio else None
+    if tecnico_id_anterior is not None and tecnico_id_anterior != datos.tecnico_id:
+        await _disparar_bono(db, tecnico_id_anterior, fecha_ref)
+    await _disparar_bono(db, datos.tecnico_id, fecha_ref)
 
     from modules.reportes import notificaciones
     try:
@@ -257,6 +280,9 @@ async def transicionar_estado(tarea_id: int, datos: TransicionEstado, usuario: d
     await db.commit()
     await db.refresh(tarea)
 
+    # Recalcular bono del técnico (el estado cambió, puede afectar conteo de día cumplido)
+    await _disparar_bono(db, tarea.tecnico_id, tarea.fecha_inicio.date() if tarea.fecha_inicio else None)
+
     _ESTADOS_NOTIFICAR_SUPERVISOR = {
         EstadoTarea.BLOQUEADO,
         EstadoTarea.COMPLETADO,
@@ -292,6 +318,11 @@ def _es_supervisor(usuario: dict) -> bool:
 
 def _es_ventas(usuario: dict) -> bool:
     return usuario.get("rol") == "ventas"
+
+
+def _puede_editar_tareas(usuario: dict) -> bool:
+    """admin + supervisor + ventas pueden editar datos y asignar técnico."""
+    return usuario.get("rol") in ("administrador", "supervisor", "ventas") or usuario.get("es_admin", False)
 
 
 async def listar_tareas(
@@ -354,8 +385,10 @@ async def obtener_tarea(tarea_id: int, usuario: dict, db: AsyncSession) -> Tarea
 async def actualizar_tarea(tarea_id: int, datos: TareaUpdate, usuario: dict, db: AsyncSession) -> Tarea:
     tarea = await _obtener_tarea_o_404(tarea_id, db)
 
-    if not _es_supervisor(usuario):
-        raise PermissionError("Solo supervisores pueden editar los datos de una tarea")
+    if not _puede_editar_tareas(usuario):
+        raise PermissionError("No tienes permiso para editar los datos de una tarea")
+
+    fecha_inicio_anterior = tarea.fecha_inicio.date() if tarea.fecha_inicio else None
 
     if datos.descripcion is not None:
         tarea.descripcion = datos.descripcion
@@ -373,17 +406,27 @@ async def actualizar_tarea(tarea_id: int, datos: TareaUpdate, usuario: dict, db:
     tarea.updated_at = datetime.now()
     await db.commit()
     await db.refresh(tarea)
+
+    # Si cambió la fecha de inicio puede mover la tarea entre días/semanas; reevaluar ambas
+    fecha_inicio_nueva = tarea.fecha_inicio.date() if tarea.fecha_inicio else None
+    if fecha_inicio_anterior != fecha_inicio_nueva:
+        await _disparar_bono(db, tarea.tecnico_id, fecha_inicio_anterior)
+    await _disparar_bono(db, tarea.tecnico_id, fecha_inicio_nueva)
+
     return tarea
 
 
 async def eliminar_tarea(tarea_id: int, usuario: dict, db: AsyncSession) -> None:
     from sqlalchemy import delete
     tarea = await _obtener_tarea_o_404(tarea_id, db)
+    tecnico_id = tarea.tecnico_id
+    fecha_ref = tarea.fecha_inicio.date() if tarea.fecha_inicio else None
     # Cascada explícita: SQLite no respeta ON DELETE CASCADE por defecto.
     await db.execute(delete(TareaEvento).where(TareaEvento.tarea_id == tarea_id))
     await db.execute(delete(TareaFoto).where(TareaFoto.tarea_id == tarea_id))
     await db.delete(tarea)
     await db.commit()
+    await _disparar_bono(db, tecnico_id, fecha_ref)
 
 
 async def actualizar_datos_instalacion(tarea_id: int, datos: InstalacionDatosUpdate, usuario: dict, db: AsyncSession) -> Tarea:
