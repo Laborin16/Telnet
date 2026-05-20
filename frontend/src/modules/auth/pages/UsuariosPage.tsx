@@ -316,6 +316,7 @@ function NuevoUsuarioModal({
   onSubmit: (data: {
     username: string; nombre: string; rol: RolUsuario;
     sueldo_semanal?: number | null; area?: string | null; en_nomina?: boolean;
+    monto_bono?: number | null;
   }) => void;
   isPending: boolean;
   error: string;
