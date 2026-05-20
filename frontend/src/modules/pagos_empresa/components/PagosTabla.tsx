@@ -79,7 +79,8 @@ export function PagosTabla({ categoriaId, archivadas = false }: Props) {
               {pagos.map(p => {
                 const venc = new Date(p.fecha_vencimiento + "T00:00:00");
                 const venceEnDias = Math.floor((venc.getTime() - hoy.getTime()) / (24 * 60 * 60 * 1000));
-                const vencido = p.estado === "PENDIENTE" && venceEnDias < 0;
+                // Vence hoy o pasado = vencido. Vence mañana o pasado-mañana = vence pronto.
+                const vencido = p.estado === "PENDIENTE" && venceEnDias <= 0;
                 const proximo = p.estado === "PENDIENTE" && !vencido && (venc.getTime() - hoy.getTime()) <= ms2dias;
                 return (
                   <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
